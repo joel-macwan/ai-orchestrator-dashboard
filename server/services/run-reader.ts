@@ -117,6 +117,7 @@ function normalizeRunState(raw: RawRunState): RunState {
     baseBranch: raw.baseBranch,
     branch: raw.branch,
     worktreePath: raw.worktreePath,
+    status: raw.status,
     steps: raw.steps ?? [],
     tasks: collectTasks(raw.steps ?? []),
     startedAt: raw.pipelineStartedAt,
@@ -128,6 +129,11 @@ function normalizeRunState(raw: RawRunState): RunState {
 // ─── List Runs ──────────────────────────────────────────────────────────────
 
 function getRunStatus(state: RunState, phases: PhaseInfo[]): RunSummary['status'] {
+  // Authoritative: the orchestrator's top-level status on tasks.json.
+  if (state.status === 'completed') return 'completed';
+  if (state.status === 'failed') return 'failed';
+  if (state.status === 'in_progress') return 'running';
+
   const taskFailed = state.tasks.some((t) => t.status === 'failed');
   const phaseFailed = phases.some((p) => p.status === 'failed');
   if (taskFailed || phaseFailed) return 'failed';
@@ -420,11 +426,14 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
   const modelMap = readPipelineConfig(runsPath);
   const phases = buildPhases(state, logsDir, modelMap);
 
-  // If every phase is terminal but the run never wrote pipelineCompletedAt,
-  // synthesize one from the latest log timestamp so the UI stops ticking.
+  // Synthesize completedAt from the latest log timestamp when the orchestrator
+  // reports a terminal top-level status, or (legacy fallback) every phase is
+  // terminal — so the UI stops ticking even if pipelineCompletedAt is missing.
+  const statusTerminal = state.status === 'completed' || state.status === 'failed';
   const allTerminal =
-    phases.length > 0 && phases.every((p) => p.status === 'done' || p.status === 'failed');
-  if (allTerminal && !state.completedAt && latestLogTs) {
+    phases.length > 0 &&
+    phases.every((p) => p.status === 'done' || p.status === 'failed' || p.status === 'skipped');
+  if ((statusTerminal || allTerminal) && !state.completedAt && latestLogTs) {
     state = { ...state, completedAt: latestLogTs };
   }
 

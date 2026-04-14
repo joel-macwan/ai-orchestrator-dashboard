@@ -22,6 +22,11 @@ const SECTION_TITLE_CLASSES = 'text-sm font-medium uppercase tracking-wider text
 
 /** Derive the overall run status from the run state. */
 function deriveRunStatus(state: RunState): string {
+  // Authoritative: orchestrator's top-level status on tasks.json.
+  if (state.status === 'completed') return 'completed';
+  if (state.status === 'failed') return 'failed';
+  if (state.status === 'in_progress') return 'running';
+
   const hasFailed = state.tasks.some((t) => t.status === 'failed');
   if (state.completedAt) {
     return hasFailed ? 'failed' : 'completed';
@@ -124,8 +129,8 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
 
   // ─── Derived state ────────────────────────────────────────────────────
 
-  const isRunning = !detail.state.completedAt;
   const runStatus = deriveRunStatus(detail.state);
+  const isRunning = runStatus === 'running';
   const statusStyle = RUN_HEADER_STATUS_STYLES[runStatus] ?? '';
 
   // ─── Render ───────────────────────────────────────────────────────────

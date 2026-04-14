@@ -45,6 +45,8 @@ export interface RunState {
   baseBranch: string;
   branch: string;
   worktreePath?: string;
+  /** Overall loop status from the orchestrator (authoritative). */
+  status?: StepStatus;
   tasks: AgentTask[];
   steps: PipelineStepState[];
   startedAt: string;

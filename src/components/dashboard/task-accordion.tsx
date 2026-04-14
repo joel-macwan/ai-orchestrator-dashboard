@@ -135,10 +135,11 @@ function buildStepTasksMap(steps: PipelineStepState[]): Map<string, AgentTask[]>
   return map;
 }
 
-/** Sum the cost of all tasks/agents belonging to a phase. */
+/** Sum the cost of all tasks/agents/step-itself belonging to a phase. */
 function getPhaseCost(
   phase: PhaseInfo,
   stepTasksMap: Map<string, AgentTask[]>,
+  steps: PipelineStepState[],
   agents: AgentInfo[],
 ): number {
   if (!phase.stepId) return 0;
@@ -146,6 +147,9 @@ function getPhaseCost(
   if (tasks) {
     return tasks.reduce((sum, t) => sum + (t.tokenUsage?.costUsd ?? 0), 0);
   }
+  // No subtasks — prefer the step's own tokenUsage, fall back to agent logs.
+  const step = steps.find((s) => s.id === phase.stepId);
+  if (step?.tokenUsage?.costUsd) return step.tokenUsage.costUsd;
   return agents
     .filter((a) => a.name === phase.stepId)
     .reduce((sum, a) => sum + (a.tokenUsage?.costUsd ?? 0), 0);
@@ -159,12 +163,12 @@ function getPhaseItemValue(phase: PhaseInfo): string {
 }
 
 /** Create a synthetic task row for phases that have no subtasks. */
-function getPhaseMainTask(phase: PhaseInfo): PhaseTaskRow {
+function getPhaseMainTask(phase: PhaseInfo, cost: number): PhaseTaskRow {
   return {
     id: getPhaseItemValue(phase),
     title: `${phase.label} phase`,
     status: PHASE_TO_TASK_STATUS[phase.status] ?? 'pending',
-    cost: 0,
+    cost,
   };
 }
 
@@ -189,7 +193,8 @@ export function TaskAccordion({ phases, steps, tasks, agents, onSelectTask, onSe
         const iconStyle = PHASE_STATUS_ICON_STYLES[phase.status] ?? '';
         const hasSubtasks = phase.stepId ? stepTasksMap.has(phase.stepId) : false;
         const phaseTasks = hasSubtasks ? sortedTasks : [];
-        const mainTask = hasSubtasks ? null : getPhaseMainTask(phase);
+        const phaseCost = getPhaseCost(phase, stepTasksMap, steps, agents);
+        const mainTask = hasSubtasks ? null : getPhaseMainTask(phase, phaseCost);
         const itemValue = getPhaseItemValue(phase);
         const phaseStatusLabel = phase.status === 'done' ? 'Completed' : capitalize(phase.status);
 
@@ -218,7 +223,7 @@ export function TaskAccordion({ phases, steps, tasks, agents, onSelectTask, onSe
                     {phaseStatusLabel}
                   </Badge>
                   <span className={cn(COST_LABEL_CLASSES, 'mr-4')}>
-                    {formatCost(getPhaseCost(phase, stepTasksMap, agents))}
+                    {formatCost(phaseCost)}
                   </span>
                 </div>
               </div>
