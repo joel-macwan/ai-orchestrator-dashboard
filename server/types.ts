@@ -87,13 +87,15 @@ export interface LogEntry {
   durationMs?: number;
 }
 
-export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
+export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
 export interface PhaseInfo {
   id: number;
   label: string;
   status: PhaseStatus;
   stepId?: string;
+  /** AI model configured for this phase in pipeline.json. */
+  model?: string;
 }
 
 export interface AgentInfo {

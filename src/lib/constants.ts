@@ -126,16 +126,16 @@ export const PHASE_ACCORDION_PREFIX = 'phase-';
 // ─── Run Status Styles ──────────────────────────────────────────────────────
 
 export const RUN_STATUS_BADGE_STYLES: Record<RunSummary['status'], string> = {
-  running: 'bg-secondary text-secondary-foreground border-border',
+  running: 'bg-amber-400 text-black border-border',
   completed: 'bg-chart-4 text-black border-border',
-  failed: 'bg-destructive text-destructive-foreground dark:text-white border-border',
+  failed: 'bg-red-500 text-white border-border',
   pending: 'bg-muted text-muted-foreground border-border',
 };
 
 export const RUN_STATUS_COLORS: Record<RunSummary['status'], string> = {
-  running: 'text-primary',
+  running: 'text-amber-400',
   completed: 'text-chart-4',
-  failed: 'text-destructive',
+  failed: 'text-red-500',
   pending: 'text-muted-foreground',
 };
 
@@ -184,24 +184,26 @@ export const TASK_STATUS_ORDER: Record<TaskStatus, number> = {
 
 export const PHASE_STATUS_ICON_STYLES: Record<string, string> = {
   done: 'text-chart-4',
-  running: 'text-primary animate-spin',
+  running: 'text-amber-400 animate-spin',
   pending: 'text-muted-foreground',
-  failed: 'text-destructive',
+  failed: 'text-red-500',
+  skipped: 'text-muted-foreground',
 };
 
 export const PHASE_STATUS_BADGE_STYLES: Record<string, string> = {
   done: 'bg-chart-4 text-black border-border',
-  running: 'bg-secondary text-secondary-foreground border-border',
-  failed: 'bg-destructive text-destructive-foreground dark:text-white border-border',
+  running: 'bg-amber-400 text-black border-border',
+  failed: 'bg-red-500 text-white border-border',
   pending: 'bg-muted text-muted-foreground border-border',
+  skipped: 'bg-muted text-muted-foreground border-border',
 };
 
 // ─── Run Status Header Styles ───────────────────────────────────────────────
 
 export const RUN_HEADER_STATUS_STYLES: Record<string, string> = {
-  running: 'bg-secondary text-secondary-foreground border-border',
+  running: 'bg-amber-400 text-black border-border',
   completed: 'bg-chart-4 text-black border-border',
-  failed: 'bg-destructive text-destructive-foreground dark:text-white border-border',
+  failed: 'bg-red-500 text-white border-border',
   pending: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -212,6 +214,7 @@ export const PHASE_TO_TASK_STATUS: Record<string, TaskStatus> = {
   running: 'in_progress',
   pending: 'pending',
   failed: 'failed',
+  skipped: 'pending',
 };
 
 // ─── Recent Logs Display ────────────────────────────────────────────────────

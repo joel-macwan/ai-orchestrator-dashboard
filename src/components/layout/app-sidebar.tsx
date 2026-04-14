@@ -15,7 +15,7 @@ import {
   Plus,
   Trash2,
   Bot,
-  Loader2,
+  RefreshCw,
   CheckCircle2,
   XCircle,
   Clock,
@@ -39,11 +39,22 @@ import type { Project, RunSummary, ProjectRunsProps, AppSidebarProps } from '@/l
 // ─── Status Icons ───────────────────────────────────────────────────────────
 
 const RUN_STATUS_ICONS: Record<RunSummary['status'], React.ElementType> = {
-  running: Loader2,
+  running: RefreshCw,
   completed: CheckCircle2,
   failed: XCircle,
   pending: Clock,
 };
+
+// ─── Shared Styles ──────────────────────────────────────────────────────────
+
+const ICON_BUTTON_BASE = 'flex h-7 w-7 items-center justify-center rounded-md';
+const RUN_ITEM_CLASSES = [
+  'flex items-start gap-2 py-2 h-auto border border-transparent',
+  'dark:bg-muted/40',
+  'hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/20',
+  'data-active:bg-muted-foreground/10 dark:data-active:bg-muted-foreground/30',
+  'data-active:border-border',
+].join(' ');
 
 // ─── Project Runs Section ───────────────────────────────────────────────────
 
@@ -51,30 +62,45 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
   const fetcher = useCallback(() => fetchRuns(project.id), [project.id]);
   const { data: runs } = usePolling(fetcher);
 
+  const handleRemove = useCallback(() => {
+    onRemove(project.id);
+  }, [project.id, onRemove]);
+
+  const handleSelectRun = useCallback((ticketId: string) => {
+    onSelectRun(project.id, ticketId);
+  }, [project.id, onSelectRun]);
+
+  const hasRuns = runs && runs.length > 0;
+
   return (
     <SidebarGroup>
+      {/* Project header with name and delete button */}
       <SidebarGroupLabel className="flex items-center justify-between px-0 text-sm font-semibold mb-2">
         <span className="truncate">{project.name}</span>
         <button
-          onClick={() => onRemove(project.id)}
-          className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500/10 text-red-500 hover:bg-red-500/20"
+          onClick={handleRemove}
+          className={`${ICON_BUTTON_BASE} bg-red-500/10 text-red-500 hover:bg-red-500/20`}
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </SidebarGroupLabel>
+
+      {/* List of runs for this project */}
       <SidebarGroupContent>
         <SidebarMenu>
           {runs?.map((run) => {
             const StatusIcon = RUN_STATUS_ICONS[run.status];
             const statusColor = RUN_STATUS_COLORS[run.status];
+            const isRunning = run.status === 'running';
+
             return (
               <SidebarMenuItem key={run.ticketId}>
                 <SidebarMenuButton
                   isActive={selectedRun === run.ticketId}
-                  onClick={() => onSelectRun(project.id, run.ticketId)}
-                  className="flex items-start gap-2 py-2 h-auto border border-transparent dark:bg-muted/40 hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/20 data-active:bg-muted-foreground/10 dark:data-active:bg-muted-foreground/30 data-active:border-border"
+                  onClick={() => handleSelectRun(run.ticketId)}
+                  className={RUN_ITEM_CLASSES}
                 >
-                  <StatusIcon className={`h-4 w-4 mt-0.5 shrink-0 ${statusColor} ${run.status === 'running' ? 'animate-spin' : ''}`} />
+                  <StatusIcon className={`h-4 w-4 mt-0.5 shrink-0 ${statusColor} ${isRunning ? 'animate-spin' : ''}`} />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm truncate">{run.ticketId}</div>
                     <div className="text-xs text-muted-foreground truncate">
@@ -96,7 +122,7 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
               </SidebarMenuItem>
             );
           })}
-          {(!runs || runs.length === 0) && (
+          {!hasRuns && (
             <p className="px-3 py-2 text-xs text-muted-foreground">No runs found</p>
           )}
         </SidebarMenu>
@@ -112,28 +138,54 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const { data: projects, refresh } = usePolling(fetchProjects);
 
-  const handleAddProject = async (name: string, runsPath: string) => {
+  const hasProjects = projects && projects.length > 0;
+  const isDeleteDialogOpen = projectToDelete !== null;
+
+  const openAddDialog = useCallback(() => {
+    setAddDialogOpen(true);
+  }, []);
+
+  const closeAddDialog = useCallback(() => {
+    setAddDialogOpen(false);
+  }, []);
+
+  const handleAddProject = useCallback(async (name: string, runsPath: string) => {
     await addProject(name, runsPath);
     refresh();
-  };
+  }, [refresh]);
 
-  const requestRemoveProject = (id: string) => {
+  /** Show confirmation dialog before removing a project. */
+  const requestRemoveProject = useCallback((id: string) => {
     const project = projects?.find((p) => p.id === id);
-    if (project) setProjectToDelete(project);
-  };
+    if (project) {
+      setProjectToDelete(project);
+    }
+  }, [projects]);
 
-  const confirmRemoveProject = async () => {
+  const cancelRemoveProject = useCallback(() => {
+    setProjectToDelete(null);
+  }, []);
+
+  /** Remove the project and reset selection if it was active. */
+  const confirmRemoveProject = useCallback(async () => {
     if (!projectToDelete) return;
     const removedId = projectToDelete.id;
     await removeProject(removedId);
     setProjectToDelete(null);
     refresh();
     onProjectRemoved(removedId);
-  };
+  }, [projectToDelete, refresh, onProjectRemoved]);
+
+  const handleDeleteDialogChange = useCallback((isOpen: boolean) => {
+    if (!isOpen) {
+      setProjectToDelete(null);
+    }
+  }, []);
 
   return (
     <>
       <Sidebar>
+        {/* Sidebar branding */}
         <SidebarHeader className="border-b border-sidebar-border px-4 h-14 flex flex-row items-center justify-center">
           <div className="flex items-center gap-2">
             <Bot className="h-5 w-5" />
@@ -142,13 +194,14 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
         </SidebarHeader>
 
         <SidebarContent>
+          {/* Projects header with add button */}
           <SidebarGroup>
             <div className="flex items-center justify-between">
               <SidebarGroupLabel className="px-0 text-lg font-semibold">Projects</SidebarGroupLabel>
               <button
-                onClick={() => setAddDialogOpen(true)}
+                onClick={openAddDialog}
                 title="Add project"
-                className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-500 hover:bg-blue-500/20"
+                className={`${ICON_BUTTON_BASE} bg-blue-500/10 text-blue-500 hover:bg-blue-500/20`}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -156,6 +209,7 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
             <div className="mt-2 border-t border-sidebar-border" />
           </SidebarGroup>
 
+          {/* Project list with their runs */}
           {projects?.map((project) => (
             <ProjectRuns
               key={project.id}
@@ -166,11 +220,12 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
             />
           ))}
 
-          {(!projects || projects.length === 0) && (
+          {/* Empty state when no projects exist */}
+          {!hasProjects && (
             <div className="px-4 py-8 text-center">
               <p className="text-base text-muted-foreground mb-3">No projects added yet</p>
               <button
-                onClick={() => setAddDialogOpen(true)}
+                onClick={openAddDialog}
                 className="text-base font-medium text-primary hover:underline"
               >
                 + Add your first project
@@ -180,16 +235,15 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
         </SidebarContent>
       </Sidebar>
 
+      {/* Add project dialog */}
       <AddProjectDialog
         open={addDialogOpen}
-        onClose={() => setAddDialogOpen(false)}
+        onClose={closeAddDialog}
         onAdd={handleAddProject}
       />
 
-      <Dialog
-        open={projectToDelete !== null}
-        onOpenChange={(isOpen) => !isOpen && setProjectToDelete(null)}
-      >
+      {/* Delete confirmation dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete project?</DialogTitle>
@@ -198,7 +252,7 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectToDelete(null)}>
+            <Button variant="outline" onClick={cancelRemoveProject}>
               Cancel
             </Button>
             <Button onClick={confirmRemoveProject}>

@@ -87,11 +87,12 @@ function humanizeStepId(id: string): string {
 
 /**
  * Map a pipeline step's status to a dashboard phase status. `skipped` is
- * treated as `done` so the pipeline row stops animating once the orchestrator
- * decides not to run a step.
+ * surfaced as its own state so the UI can distinguish it from `done`
+ * (e.g. when an earlier phase fails and downstream phases are bypassed).
  */
 function phaseStatusFromStep(status: StepStatus | undefined): PhaseStatus {
-  if (status === 'completed' || status === 'skipped') return 'done';
+  if (status === 'completed') return 'done';
+  if (status === 'skipped') return 'skipped';
   if (status === 'in_progress') return 'running';
   if (status === 'failed') return 'failed';
   return 'pending';
@@ -255,7 +256,7 @@ function hasAction(entries: LogEntry[], ...actions: string[]): boolean {
  * tasks.json so the dashboard stays in sync with pipeline.json without
  * having to duplicate it.
  */
-function buildPhases(state: RunState | null, logsDir: string): PhaseInfo[] {
+function buildPhases(state: RunState | null, logsDir: string, modelMap?: Map<string, string>): PhaseInfo[] {
   const orchEntries = readJsonl(path.join(logsDir, ORCHESTRATOR_LOG_FILE));
   const gitDone = orchEntries.some((e) => e.action === LogAction.Git);
   const gitRunning = orchEntries.length > 0 && !gitDone;
@@ -275,10 +276,36 @@ function buildPhases(state: RunState | null, logsDir: string): PhaseInfo[] {
       label: humanizeStepId(step.id),
       status: phaseStatusFromStep(step.status),
       stepId: step.id,
+      model: modelMap?.get(step.id),
     });
   });
 
   return phases;
+}
+
+// ─── Pipeline Config ───────────────────────────────────────────────────────
+
+interface PipelineStep {
+  id: string;
+  model?: string;
+}
+
+interface PipelineConfig {
+  steps: PipelineStep[];
+}
+
+/** Read pipeline.json from the parent of the runs directory and build a stepId -> model map. */
+function readPipelineConfig(runsPath: string): Map<string, string> {
+  const pipelinePath = path.join(runsPath, '..', 'pipeline.json');
+  const config = readJson<PipelineConfig>(pipelinePath);
+  const modelMap = new Map<string, string>();
+  if (!config?.steps) return modelMap;
+  for (const step of config.steps) {
+    if (step.model) {
+      modelMap.set(step.id, step.model);
+    }
+  }
+  return modelMap;
 }
 
 function buildAgents(logsDir: string): AgentInfo[] {
@@ -390,7 +417,8 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
   }
   state = { ...state, totalCostUsd: totalFromLogs };
 
-  const phases = buildPhases(state, logsDir);
+  const modelMap = readPipelineConfig(runsPath);
+  const phases = buildPhases(state, logsDir, modelMap);
 
   // If every phase is terminal but the run never wrote pipelineCompletedAt,
   // synthesize one from the latest log timestamp so the UI stops ticking.

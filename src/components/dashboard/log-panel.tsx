@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Search,
@@ -47,8 +47,34 @@ const TOOL_ICONS: Record<string, React.ElementType> = {
   [ToolName.WebSearch]: Globe,
 };
 
+const DEFAULT_TOOL_ICON = Terminal;
+
 function getToolIcon(toolName: string): React.ElementType {
-  return TOOL_ICONS[toolName] ?? Terminal;
+  return TOOL_ICONS[toolName] ?? DEFAULT_TOOL_ICON;
+}
+
+// ─── Shared cost badge used across row types ────────────────────────────────
+
+function CostBadge({ costUsd }: { costUsd: number }) {
+  if (costUsd <= 0) return null;
+  return (
+    <span className="text-[10px] text-muted-foreground font-mono">
+      +{formatCost(costUsd)}
+    </span>
+  );
+}
+
+// ─── Expand/Collapse chevron ────────────────────────────────────────────────
+
+function ExpandChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <ChevronRight
+      className={cn(
+        'h-3 w-3 text-muted-foreground transition-transform shrink-0',
+        expanded && 'rotate-90'
+      )}
+    />
+  );
 }
 
 // ─── Tool Use Row (Claude Code style) ───────────────────────────────────────
@@ -58,6 +84,10 @@ function ToolUseRow({ entry, nextEntry }: { entry: LogEntry; nextEntry?: LogEntr
   const toolName = entry.message;
   const Icon = getToolIcon(toolName);
 
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+
   // Compute duration to next entry if available
   const durationMs =
     entry.durationMs ??
@@ -65,33 +95,29 @@ function ToolUseRow({ entry, nextEntry }: { entry: LogEntry; nextEntry?: LogEntr
       ? new Date(nextEntry.timestamp).getTime() - new Date(entry.timestamp).getTime()
       : undefined);
 
+  const hasDuration = durationMs != null && durationMs > 0;
+  const durationLabel = hasDuration
+    ? (durationMs < TOOL_DURATION_MS_THRESHOLD ? `${durationMs}ms` : formatDuration(durationMs))
+    : null;
+
   return (
     <div className="border-l-2 border-chart-2/40 ml-4 py-1 bg-chart-2/10 rounded-r-md">
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={toggleExpanded}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors rounded-r-md',
           'hover:bg-chart-2/15 text-left group'
         )}
       >
-        <ChevronRight
-          className={cn(
-            'h-3 w-3 text-muted-foreground transition-transform shrink-0',
-            expanded && 'rotate-90'
-          )}
-        />
+        <ExpandChevron expanded={expanded} />
         <Icon className="h-3.5 w-3.5 text-secondary-foreground dark:text-foreground shrink-0" />
         <span className="font-mono text-xs font-medium text-secondary-foreground dark:text-foreground">{toolName}</span>
-        {durationMs != null && durationMs > 0 && (
+        {durationLabel && (
           <span className="text-[10px] text-muted-foreground ml-auto font-mono">
-            {durationMs < TOOL_DURATION_MS_THRESHOLD ? `${durationMs}ms` : formatDuration(durationMs)}
+            {durationLabel}
           </span>
         )}
-        {entry.tokenUsage && entry.tokenUsage.costUsd > 0 && (
-          <span className="text-[10px] text-muted-foreground font-mono">
-            +{formatCost(entry.tokenUsage.costUsd)}
-          </span>
-        )}
+        <CostBadge costUsd={entry.tokenUsage?.costUsd ?? 0} />
       </button>
       {expanded && (
         <div className="px-4 py-2 ml-5 text-xs text-muted-foreground font-mono bg-chart-2/20 rounded-md mx-3 mt-1">
@@ -132,21 +158,20 @@ function AccentRow({ entry, variant }: { entry: LogEntry; variant: AccentVariant
   const styles = ACCENT_STYLES[variant];
   const Icon = variant === 'start' ? Play : CheckCircle2;
 
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+
   return (
     <div className={cn('border-l-2 ml-4 py-1 rounded-r-md', styles.border, styles.bg)}>
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={toggleExpanded}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors rounded-r-md text-left group',
           styles.hover
         )}
       >
-        <ChevronRight
-          className={cn(
-            'h-3 w-3 text-muted-foreground transition-transform shrink-0',
-            expanded && 'rotate-90'
-          )}
-        />
+        <ExpandChevron expanded={expanded} />
         <Icon className={cn('h-3.5 w-3.5 shrink-0', styles.text)} />
         <span className={cn('font-mono text-xs font-medium uppercase', styles.text)}>
           {entry.action}
@@ -155,11 +180,7 @@ function AccentRow({ entry, variant }: { entry: LogEntry; variant: AccentVariant
         <span className="text-[10px] text-muted-foreground ml-auto font-mono whitespace-nowrap">
           {formatTime(entry.timestamp)}
         </span>
-        {entry.tokenUsage && entry.tokenUsage.costUsd > 0 && (
-          <span className="text-[10px] text-muted-foreground font-mono">
-            +{formatCost(entry.tokenUsage.costUsd)}
-          </span>
-        )}
+        <CostBadge costUsd={entry.tokenUsage?.costUsd ?? 0} />
       </button>
       {expanded && (
         <div
@@ -177,35 +198,24 @@ function AccentRow({ entry, variant }: { entry: LogEntry; variant: AccentVariant
 
 // ─── Standard Log Entry Row ─────────────────────────────────────────────────
 
+/** Icon and color config for standard (non-tool, non-accent) log entries. */
+const STANDARD_LOG_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
+  [LogAction.Complete]: { icon: CheckCircle2, color: 'text-secondary-foreground dark:text-foreground' },
+  [LogAction.SessionEnd]: { icon: CheckCircle2, color: 'text-secondary-foreground dark:text-foreground' },
+  [LogAction.Error]: { icon: XCircle, color: 'text-destructive' },
+  [LogAction.Start]: { icon: Play, color: 'text-secondary-foreground dark:text-foreground' },
+  [LogAction.Git]: { icon: Terminal, color: 'text-primary' },
+};
+
+const DEFAULT_LOG_CONFIG = { icon: MessageSquare, color: 'text-muted-foreground' };
+
 function StandardLogRow({ entry }: { entry: LogEntry }) {
-  const isStart = entry.action === LogAction.Start;
-  const isComplete = entry.action === LogAction.Complete || entry.action === LogAction.SessionEnd;
-  const isError = entry.action === LogAction.Error;
-  const isGit = entry.action === LogAction.Git;
-
-  const StatusIcon = isComplete
-    ? CheckCircle2
-    : isError
-      ? XCircle
-      : isStart
-        ? Play
-        : isGit
-          ? Terminal
-          : MessageSquare;
-
-  const iconColor = isComplete
-    ? 'text-secondary-foreground dark:text-foreground'
-    : isError
-      ? 'text-destructive'
-      : isStart
-        ? 'text-secondary-foreground dark:text-foreground'
-        : isGit
-          ? 'text-primary'
-          : 'text-muted-foreground';
+  const config = STANDARD_LOG_CONFIG[entry.action] ?? DEFAULT_LOG_CONFIG;
+  const StatusIcon = config.icon;
 
   return (
     <div className="flex gap-3 px-4 py-2.5 text-sm border-b border-border/50 bg-muted/30 hover:bg-accent/50 transition-colors">
-      <StatusIcon className={cn('h-4 w-4 mt-0.5 shrink-0', iconColor)} />
+      <StatusIcon className={cn('h-4 w-4 mt-0.5 shrink-0', config.color)} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <Badge
@@ -223,16 +233,12 @@ function StandardLogRow({ entry }: { entry: LogEntry }) {
           <MarkdownViewer content={entry.message} />
         </div>
       </div>
-      {entry.tokenUsage && entry.tokenUsage.costUsd > 0 && (
-        <span className="text-xs text-muted-foreground whitespace-nowrap pt-0.5">
-          +{formatCost(entry.tokenUsage.costUsd)}
-        </span>
-      )}
+      <CostBadge costUsd={entry.tokenUsage?.costUsd ?? 0} />
     </div>
   );
 }
 
-// ─── Log Entry Row (delegates to ToolUse or Standard) ───────────────────────
+// ─── Log Entry Row (delegates to ToolUse, Accent, or Standard) ─────────────
 
 function LogRow({ entry, nextEntry }: { entry: LogEntry; nextEntry?: LogEntry }) {
   if (entry.action === LogAction.ToolUse) {
@@ -247,15 +253,19 @@ function LogRow({ entry, nextEntry }: { entry: LogEntry; nextEntry?: LogEntry })
   return <StandardLogRow entry={entry} />;
 }
 
-// ─── Log Panel ──────────────────────────────────────────────────────────────
+// ─── Result Section ────────────────────────────────────────────────────────
 
 function ResultSection({ result }: { result: string }) {
   const [expanded, setExpanded] = useState(true);
 
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+
   return (
     <div className="border-b border-border">
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggleExpanded}
         className="flex w-full items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/50 transition-colors"
       >
         {expanded ? (
@@ -275,15 +285,20 @@ function ResultSection({ result }: { result: string }) {
   );
 }
 
+// ─── Log Panel ──────────────────────────────────────────────────────────────
+
 export function LogPanel({ title, logs, loading, onClose, result }: LogPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const hasLogs = logs.length > 0;
 
+  // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs.length]);
 
   return (
     <div className="flex h-full flex-col border-l border-border">
+      {/* Panel header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h3 className="font-semibold text-sm">Logs</h3>
@@ -294,13 +309,14 @@ export function LogPanel({ title, logs, loading, onClose, result }: LogPanelProp
         </Button>
       </div>
 
+      {/* Log entries */}
       <ScrollArea className="flex-1 overflow-y-auto">
         {result && <ResultSection result={result} />}
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <span className="text-sm text-muted-foreground">Loading logs...</span>
           </div>
-        ) : logs.length === 0 ? (
+        ) : !hasLogs ? (
           <div className="flex items-center justify-center py-8">
             <span className="text-sm text-muted-foreground">No logs available</span>
           </div>

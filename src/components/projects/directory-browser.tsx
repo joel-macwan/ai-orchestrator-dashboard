@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Folder, ArrowUp, Check } from 'lucide-react';
 import {
   Dialog,
@@ -13,13 +13,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { browseDirectory } from '@/lib/api';
 import type { DirectoryListing, DirectoryBrowserProps } from '@/lib/types';
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const ENTER_KEY = 'Enter';
+
+// ─── Directory Browser ─────────────────────────────────────────────────────
+
 export function DirectoryBrowser({ open, onClose, onSelect }: DirectoryBrowserProps) {
   const [listing, setListing] = useState<DirectoryListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pathInput, setPathInput] = useState('');
 
-  const browse = async (dirPath?: string) => {
+  const hasListing = listing !== null;
+  const hasEntries = listing?.entries && listing.entries.length > 0;
+
+  /** Fetch directory contents for the given path. */
+  const browse = useCallback(async (dirPath?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -31,40 +41,75 @@ export function DirectoryBrowser({ open, onClose, onSelect }: DirectoryBrowserPr
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Browse the root directory when the dialog opens
   useEffect(() => {
-    if (open) browse();
-  }, [open]);
+    if (open) {
+      browse();
+    }
+  }, [open, browse]);
 
-  const handleNavigate = (dirPath: string) => browse(dirPath);
-  const handleGoUp = () => listing && browse(listing.parent);
-  const handlePathSubmit = () => pathInput && browse(pathInput);
+  const handleNavigate = useCallback((dirPath: string) => {
+    browse(dirPath);
+  }, [browse]);
 
-  const handleSelect = () => {
-    if (listing) onSelect(listing.current);
-  };
+  const handleGoUp = useCallback(() => {
+    if (listing) {
+      browse(listing.parent);
+    }
+  }, [listing, browse]);
+
+  const handlePathSubmit = useCallback(() => {
+    if (pathInput) {
+      browse(pathInput);
+    }
+  }, [pathInput, browse]);
+
+  const handlePathKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === ENTER_KEY) {
+      handlePathSubmit();
+    }
+  }, [handlePathSubmit]);
+
+  const handlePathChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPathInput(e.target.value);
+  }, []);
+
+  const handleSelect = useCallback(() => {
+    if (listing) {
+      onSelect(listing.current);
+    }
+  }, [listing, onSelect]);
+
+  const handleDialogChange = useCallback((isOpen: boolean) => {
+    if (!isOpen) {
+      onClose();
+    }
+  }, [onClose]);
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog open={open} onOpenChange={handleDialogChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Select Runs Directory</DialogTitle>
         </DialogHeader>
 
+        {/* Path input with navigate-up button */}
         <div className="flex gap-2">
           <Input
             value={pathInput}
-            onChange={(e) => setPathInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handlePathSubmit()}
+            onChange={handlePathChange}
+            onKeyDown={handlePathKeyDown}
             placeholder="/path/to/runs"
             className="flex-1 font-mono text-xs"
           />
-          <Button variant="outline" size="icon" onClick={handleGoUp} disabled={!listing}>
+          <Button variant="outline" size="icon" onClick={handleGoUp} disabled={!hasListing}>
             <ArrowUp className="h-4 w-4" />
           </Button>
         </div>
 
+        {/* Directory listing */}
         <ScrollArea className="h-72 rounded-md border">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -86,7 +131,7 @@ export function DirectoryBrowser({ open, onClose, onSelect }: DirectoryBrowserPr
                   <span className="truncate">{entry.name}</span>
                 </button>
               ))}
-              {listing?.entries.length === 0 && (
+              {!hasEntries && (
                 <p className="px-3 py-4 text-center text-sm text-muted-foreground">
                   No subdirectories
                 </p>
@@ -99,7 +144,7 @@ export function DirectoryBrowser({ open, onClose, onSelect }: DirectoryBrowserPr
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSelect} disabled={!listing}>
+          <Button onClick={handleSelect} disabled={!hasListing}>
             <Check className="h-4 w-4 mr-2" />
             Select This Folder
           </Button>

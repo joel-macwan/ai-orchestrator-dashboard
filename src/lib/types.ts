@@ -1,5 +1,5 @@
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'blocked';
-export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
+export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 export type StepStatus =
   | 'pending'
   | 'in_progress'
@@ -68,6 +68,8 @@ export interface PhaseInfo {
   status: PhaseStatus;
   /** Pipeline step id this phase mirrors. Absent for the synthetic Git Setup phase. */
   stepId?: string;
+  /** AI model configured for this phase in pipeline.json. */
+  model?: string;
 }
 
 export interface AgentInfo {

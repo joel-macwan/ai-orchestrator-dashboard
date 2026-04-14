@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Header } from '@/components/layout/header';
 import { RunDetail } from '@/components/dashboard/run-detail';
 import { Bot } from 'lucide-react';
+
+// ─── Empty State (shown when no run is selected) ───────────────────────────
 
 function EmptyState() {
   return (
@@ -18,21 +20,25 @@ function EmptyState() {
   );
 }
 
+// ─── App Root ──────────────────────────────────────────────────────────────
+
 export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  const handleSelectRun = (projectId: string, ticketId: string) => {
+  const hasSelection = selectedProjectId !== null && selectedRunId !== null;
+
+  const handleSelectRun = useCallback((projectId: string, ticketId: string) => {
     setSelectedProjectId(projectId);
     setSelectedRunId(ticketId);
-  };
+  }, []);
 
-  const handleProjectRemoved = (projectId: string) => {
-    if (selectedProjectId === projectId) {
-      setSelectedProjectId(null);
-      setSelectedRunId(null);
-    }
-  };
+  /** Reset selection when the currently viewed project is removed. */
+  const handleProjectRemoved = useCallback((projectId: string) => {
+    if (selectedProjectId !== projectId) return;
+    setSelectedProjectId(null);
+    setSelectedRunId(null);
+  }, [selectedProjectId]);
 
   return (
     <TooltipProvider>
@@ -47,7 +53,7 @@ export default function App() {
           <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
             <Header />
             <main className="flex-1 min-h-0 overflow-y-auto">
-              {selectedProjectId && selectedRunId ? (
+              {hasSelection ? (
                 <RunDetail
                   projectId={selectedProjectId}
                   ticketId={selectedRunId}
