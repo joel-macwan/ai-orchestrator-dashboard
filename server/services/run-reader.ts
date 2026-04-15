@@ -16,6 +16,7 @@ import type {
 } from '../types.js';
 import {
   AGENT_STATUS_ORDER,
+  AgentStatusValue,
   DEFAULT_BASE_BRANCH,
   DEFAULT_BUDGET,
   DEFAULT_DESCRIPTION,
@@ -28,8 +29,12 @@ import {
   ORCHESTRATOR_LOG_FILE,
   ORCHESTRATOR_START_PREFIX_PATTERN,
   PER_FILE_TAIL_COUNT,
+  PhaseStatusValue,
   RECENT_LOG_COUNT,
   RUN_FILES,
+  RunStatusValue,
+  StepStatusValue,
+  TaskStatusValue,
   TICKET_BRANCH_PREFIX,
   ZERO_TOKENS,
 } from '../constants.js';
@@ -91,11 +96,11 @@ function humanizeStepId(id: string): string {
  * (e.g. when an earlier phase fails and downstream phases are bypassed).
  */
 function phaseStatusFromStep(status: StepStatus | undefined): PhaseStatus {
-  if (status === 'completed') return 'done';
-  if (status === 'skipped') return 'skipped';
-  if (status === 'in_progress') return 'running';
-  if (status === 'failed') return 'failed';
-  return 'pending';
+  if (status === StepStatusValue.Completed) return PhaseStatusValue.Done;
+  if (status === StepStatusValue.Skipped) return PhaseStatusValue.Skipped;
+  if (status === StepStatusValue.InProgress) return PhaseStatusValue.Running;
+  if (status === StepStatusValue.Failed) return PhaseStatusValue.Failed;
+  return PhaseStatusValue.Pending;
 }
 
 /**
@@ -131,27 +136,28 @@ function normalizeRunState(raw: RawRunState): RunState {
 
 function getRunStatus(state: RunState, phases: PhaseInfo[]): RunSummary['status'] {
   // Authoritative: the orchestrator's top-level status on tasks.json.
-  if (state.status === 'completed') return 'completed';
-  if (state.status === 'failed') return 'failed';
-  if (state.status === 'in_progress') return 'running';
+  if (state.status === StepStatusValue.Completed) return RunStatusValue.Completed;
+  if (state.status === StepStatusValue.Failed) return RunStatusValue.Failed;
+  if (state.status === StepStatusValue.InProgress) return RunStatusValue.Running;
 
-  const taskFailed = state.tasks.some((t) => t.status === 'failed');
-  const phaseFailed = phases.some((p) => p.status === 'failed');
-  if (taskFailed || phaseFailed) return 'failed';
+  const taskFailed = state.tasks.some((t) => t.status === TaskStatusValue.Failed);
+  const phaseFailed = phases.some((p) => p.status === PhaseStatusValue.Failed);
+  if (taskFailed || phaseFailed) return RunStatusValue.Failed;
 
-  if (state.completedAt) return 'completed';
+  if (state.completedAt) return RunStatusValue.Completed;
 
-  const phaseRunning = phases.some((p) => p.status === 'running');
-  const taskRunning = state.tasks.some((t) => t.status === 'in_progress');
-  if (taskRunning || phaseRunning) return 'running';
+  const phaseRunning = phases.some((p) => p.status === PhaseStatusValue.Running);
+  const taskRunning = state.tasks.some((t) => t.status === TaskStatusValue.InProgress);
+  if (taskRunning || phaseRunning) return RunStatusValue.Running;
 
-  const allPhasesDone = phases.length > 0 && phases.every((p) => p.status === 'done');
-  if (allPhasesDone) return 'completed';
+  const allPhasesDone =
+    phases.length > 0 && phases.every((p) => p.status === PhaseStatusValue.Done);
+  if (allPhasesDone) return RunStatusValue.Completed;
 
   const hasAny =
-    state.tasks.some((t) => t.status !== 'pending') ||
-    phases.some((p) => p.status !== 'pending');
-  return hasAny ? 'running' : 'pending';
+    state.tasks.some((t) => t.status !== TaskStatusValue.Pending) ||
+    phases.some((p) => p.status !== PhaseStatusValue.Pending);
+  return hasAny ? RunStatusValue.Running : RunStatusValue.Pending;
 }
 
 function inferRunSummaryFromLogs(ticketId: string, logsDir: string): RunSummary | null {
@@ -184,10 +190,10 @@ function inferRunSummaryFromLogs(ticketId: string, logsDir: string): RunSummary 
   }
 
   const status: RunSummary['status'] = hasError
-    ? 'failed'
+    ? RunStatusValue.Failed
     : logFiles.length === 0
-      ? 'pending'
-      : 'running';
+      ? RunStatusValue.Pending
+      : RunStatusValue.Running;
 
   return {
     ticketId,
@@ -224,8 +230,8 @@ export function listRuns(runsPath: string): RunSummary[] {
         completedAt: state.completedAt,
         totalCostUsd: state.totalCostUsd,
         taskCount: state.tasks.length,
-        completedCount: state.tasks.filter((t) => t.status === 'completed').length,
-        failedCount: state.tasks.filter((t) => t.status === 'failed').length,
+        completedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Completed).length,
+        failedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Failed).length,
         status: getRunStatus(state, phases),
       });
     } else {
@@ -272,7 +278,11 @@ function buildPhases(state: RunState | null, logsDir: string, modelMap?: Map<str
     {
       id: GIT_SETUP_PHASE_ID,
       label: GIT_SETUP_LABEL,
-      status: gitDone ? 'done' : gitRunning ? 'running' : 'pending',
+      status: gitDone
+        ? PhaseStatusValue.Done
+        : gitRunning
+          ? PhaseStatusValue.Running
+          : PhaseStatusValue.Pending,
     },
   ];
 
@@ -331,7 +341,11 @@ function buildAgents(logsDir: string): AgentInfo[] {
     const isSessionDone = hasAction(entries, LogAction.SessionEnd, LogAction.Complete);
     const isError = last.action === LogAction.Error && !isSessionDone;
 
-    const status: AgentInfo['status'] = isError ? 'failed' : isSessionDone ? 'done' : 'running';
+    const status: AgentInfo['status'] = isError
+      ? AgentStatusValue.Failed
+      : isSessionDone
+        ? AgentStatusValue.Done
+        : AgentStatusValue.Running;
 
     const startTs = new Date(first.timestamp).getTime();
     const endTs = new Date(last.timestamp).getTime();
@@ -430,10 +444,16 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
   // Synthesize completedAt from the latest log timestamp when the orchestrator
   // reports a terminal top-level status, or (legacy fallback) every phase is
   // terminal — so the UI stops ticking even if pipelineCompletedAt is missing.
-  const statusTerminal = state.status === 'completed' || state.status === 'failed';
+  const statusTerminal =
+    state.status === StepStatusValue.Completed || state.status === StepStatusValue.Failed;
   const allTerminal =
     phases.length > 0 &&
-    phases.every((p) => p.status === 'done' || p.status === 'failed' || p.status === 'skipped');
+    phases.every(
+      (p) =>
+        p.status === PhaseStatusValue.Done ||
+        p.status === PhaseStatusValue.Failed ||
+        p.status === PhaseStatusValue.Skipped,
+    );
   if ((statusTerminal || allTerminal) && !state.completedAt && latestLogTs) {
     state = { ...state, completedAt: latestLogTs };
   }

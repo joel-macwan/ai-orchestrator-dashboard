@@ -49,6 +49,39 @@ export const RUN_FILES = {
 
 export const ORCHESTRATOR_LOG_FILE = 'orchestrator.jsonl';
 
+// ─── Task / Step / Phase / Run Status ───────────────────────────────────────
+
+export const TaskStatusValue = {
+  Pending: 'pending',
+  InProgress: 'in_progress',
+  Completed: 'completed',
+  Failed: 'failed',
+  Blocked: 'blocked',
+} as const;
+
+export const StepStatusValue = {
+  Pending: 'pending',
+  InProgress: 'in_progress',
+  Completed: 'completed',
+  Failed: 'failed',
+  Skipped: 'skipped',
+} as const;
+
+export const PhaseStatusValue = {
+  Pending: 'pending',
+  Running: 'running',
+  Done: 'done',
+  Failed: 'failed',
+  Skipped: 'skipped',
+} as const;
+
+export const RunStatusValue = {
+  Running: 'running',
+  Completed: 'completed',
+  Failed: 'failed',
+  Pending: 'pending',
+} as const;
+
 // ─── Log Actions ────────────────────────────────────────────────────────────
 
 export const LogAction = {
@@ -71,11 +104,18 @@ export const ORCHESTRATOR_AGENT = 'orchestrator';
 
 // ─── Agent Status Order ─────────────────────────────────────────────────────
 
+export const AgentStatusValue = {
+  Running: 'running',
+  Pending: 'pending',
+  Done: 'done',
+  Failed: 'failed',
+} as const;
+
 export const AGENT_STATUS_ORDER: Record<string, number> = {
-  running: 0,
-  pending: 1,
-  done: 2,
-  failed: 3,
+  [AgentStatusValue.Running]: 0,
+  [AgentStatusValue.Pending]: 1,
+  [AgentStatusValue.Done]: 2,
+  [AgentStatusValue.Failed]: 3,
 };
 
 // ─── Description Defaults ───────────────────────────────────────────────────

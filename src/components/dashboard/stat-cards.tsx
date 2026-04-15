@@ -9,6 +9,8 @@ import {
   STAT_CIRCULAR_SIZE,
   STAT_CIRCULAR_STROKE,
   STAT_COLORS,
+  StepStatusValue,
+  TaskStatusValue,
 } from '@/lib/constants';
 import type { StatCardsProps } from '@/lib/types';
 
@@ -19,11 +21,11 @@ export function StatCards({ detail }: StatCardsProps) {
   // completed/failed buckets when it reaches a terminal status).
   const stepsWithoutTasks = state.steps.filter((s) => !s.tasks || s.tasks.length === 0);
   const completed =
-    state.tasks.filter((t) => t.status === 'completed').length +
-    stepsWithoutTasks.filter((s) => s.status === 'completed').length;
+    state.tasks.filter((t) => t.status === TaskStatusValue.Completed).length +
+    stepsWithoutTasks.filter((s) => s.status === StepStatusValue.Completed).length;
   const failed =
-    state.tasks.filter((t) => t.status === 'failed').length +
-    stepsWithoutTasks.filter((s) => s.status === 'failed').length;
+    state.tasks.filter((t) => t.status === TaskStatusValue.Failed).length +
+    stepsWithoutTasks.filter((s) => s.status === StepStatusValue.Failed).length;
   const total = state.tasks.length + stepsWithoutTasks.length;
   const budgetPct = totalBudget > 0 ? state.totalCostUsd / totalBudget : 0;
   const budgetColor = STAT_COLORS.budget;

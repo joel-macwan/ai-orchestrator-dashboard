@@ -33,16 +33,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { RUN_STATUS_BADGE_STYLES, RUN_STATUS_COLORS } from '@/lib/constants';
+import { RUN_STATUS_BADGE_STYLES, RUN_STATUS_COLORS, RunStatusValue } from '@/lib/constants';
 import type { Project, RunSummary, ProjectRunsProps, AppSidebarProps } from '@/lib/types';
 
 // ─── Status Icons ───────────────────────────────────────────────────────────
 
 const RUN_STATUS_ICONS: Record<RunSummary['status'], React.ElementType> = {
-  running: RefreshCw,
-  completed: CheckCircle2,
-  failed: XCircle,
-  pending: Clock,
+  [RunStatusValue.Running]: RefreshCw,
+  [RunStatusValue.Completed]: CheckCircle2,
+  [RunStatusValue.Failed]: XCircle,
+  [RunStatusValue.Pending]: Clock,
 };
 
 // ─── Shared Styles ──────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
           {runs?.map((run) => {
             const StatusIcon = RUN_STATUS_ICONS[run.status];
             const statusColor = RUN_STATUS_COLORS[run.status];
-            const isRunning = run.status === 'running';
+            const isRunning = run.status === RunStatusValue.Running;
 
             return (
               <SidebarMenuItem key={run.ticketId}>

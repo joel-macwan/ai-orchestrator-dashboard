@@ -8,35 +8,36 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { capitalize } from '@/lib/format';
+import { PhaseStatusValue } from '@/lib/constants';
 import type { PhaseStepperProps, PhaseInfo } from '@/lib/types';
 
 // ─── Phase Step Styles ──────────────────────────────────────────────────────
 
 /** Circle + label styles keyed by phase status. */
 const PHASE_CIRCLE_STYLES: Record<string, string> = {
-  done: 'border-chart-4 bg-chart-4/10 text-chart-4',
-  running: 'border-amber-400 bg-amber-400/10 text-amber-400',
-  failed: 'border-red-500 bg-red-500/10 text-red-500',
-  skipped: 'border-muted-foreground/30 bg-muted/50 text-muted-foreground',
+  [PhaseStatusValue.Done]: 'border-chart-4 bg-chart-4/10 text-chart-4',
+  [PhaseStatusValue.Running]: 'border-amber-400 bg-amber-400/10 text-amber-400',
+  [PhaseStatusValue.Failed]: 'border-red-500 bg-red-500/10 text-red-500',
+  [PhaseStatusValue.Skipped]: 'border-muted-foreground/30 bg-muted/50 text-muted-foreground',
 };
 
 const PHASE_CIRCLE_DEFAULT = 'border-muted-foreground/20 bg-muted/50 text-muted-foreground';
 
 const PHASE_LABEL_STYLES: Record<string, string> = {
-  done: 'text-chart-4',
-  running: 'text-amber-400 font-semibold',
-  failed: 'text-red-500 font-semibold',
-  skipped: 'text-muted-foreground',
+  [PhaseStatusValue.Done]: 'text-chart-4',
+  [PhaseStatusValue.Running]: 'text-amber-400 font-semibold',
+  [PhaseStatusValue.Failed]: 'text-red-500 font-semibold',
+  [PhaseStatusValue.Skipped]: 'text-muted-foreground',
 };
 
 const PHASE_LABEL_DEFAULT = 'text-muted-foreground/60';
 
 /** Icon component for each phase status. */
 const PHASE_STEP_ICONS: Record<string, React.ElementType> = {
-  done: Check,
-  running: RefreshCw,
-  failed: X,
-  skipped: SkipForward,
+  [PhaseStatusValue.Done]: Check,
+  [PhaseStatusValue.Running]: RefreshCw,
+  [PhaseStatusValue.Failed]: X,
+  [PhaseStatusValue.Skipped]: SkipForward,
 };
 
 const DEFAULT_PHASE_STEP_ICON = Clock;
@@ -47,7 +48,7 @@ const STEP_CIRCLE_SIZE_PX = 48;
 // ─── Phase Step ─────────────────────────────────────────────────────────────
 
 function PhaseStep({ phase }: { phase: PhaseInfo }) {
-  const isRunning = phase.status === 'running';
+  const isRunning = phase.status === PhaseStatusValue.Running;
   const Icon = PHASE_STEP_ICONS[phase.status] ?? DEFAULT_PHASE_STEP_ICON;
   const circleStyle = PHASE_CIRCLE_STYLES[phase.status] ?? PHASE_CIRCLE_DEFAULT;
   const labelStyle = PHASE_LABEL_STYLES[phase.status] ?? PHASE_LABEL_DEFAULT;
@@ -116,14 +117,15 @@ export function PhaseStepper({ phases }: PhaseStepperProps) {
       {phases.map((phase, i) => {
         const isLast = i === phases.length - 1;
         const next = phases[i + 1];
-        const advanced = phase.status === 'done' || phase.status === 'skipped';
-        const connectorActive = advanced && next?.status === 'running';
+        const advanced =
+          phase.status === PhaseStatusValue.Done || phase.status === PhaseStatusValue.Skipped;
+        const connectorActive = advanced && next?.status === PhaseStatusValue.Running;
 
         return (
           <div key={phase.id} className="contents">
             <PhaseStep phase={phase} />
             {!isLast && (
-              <Connector done={phase.status === 'done'} active={connectorActive} />
+              <Connector done={phase.status === PhaseStatusValue.Done} active={connectorActive} />
             )}
           </div>
         );

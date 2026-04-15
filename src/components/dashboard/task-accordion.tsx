@@ -12,8 +12,10 @@ import {
   PHASE_STATUS_BADGE_STYLES,
   PHASE_STATUS_ICON_STYLES,
   PHASE_TO_TASK_STATUS,
+  PhaseStatusValue,
   STEP_ACCORDION_PREFIX,
   TASK_STATUS_ORDER,
+  TaskStatusValue,
 } from '@/lib/constants';
 import type { PhaseInfo, AgentTask, TaskStatus, AgentInfo, PipelineStepState, TaskRowProps, PhaseTaskRow, TaskAccordionProps } from '@/lib/types';
 import {
@@ -40,11 +42,11 @@ const COST_LABEL_CLASSES = 'w-14 text-xs text-foreground tabular-nums font-semib
 // ─── Status Dot ─────────────────────────────────────────────────────────────
 
 const TASK_STATUS_DOT_COLORS: Record<TaskStatus, string> = {
-  completed: 'bg-chart-4',
-  in_progress: 'bg-amber-400',
-  pending: 'bg-muted-foreground',
-  failed: 'bg-red-500',
-  blocked: 'bg-muted-foreground',
+  [TaskStatusValue.Completed]: 'bg-chart-4',
+  [TaskStatusValue.InProgress]: 'bg-amber-400',
+  [TaskStatusValue.Pending]: 'bg-muted-foreground',
+  [TaskStatusValue.Failed]: 'bg-red-500',
+  [TaskStatusValue.Blocked]: 'bg-muted-foreground',
 };
 
 /** Small colored dot indicating task status, with pulse animation for in-progress. */
@@ -52,7 +54,7 @@ function TaskStatusDot({ status }: { status: TaskStatus }) {
   const colorClass = TASK_STATUS_DOT_COLORS[status];
   return (
     <span className="relative flex h-2.5 w-2.5 shrink-0">
-      {status === 'in_progress' && (
+      {status === TaskStatusValue.InProgress && (
         <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', colorClass)} />
       )}
       <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', colorClass)} />
@@ -63,11 +65,11 @@ function TaskStatusDot({ status }: { status: TaskStatus }) {
 // ─── Phase Status Icons ─────────────────────────────────────────────────────
 
 const PHASE_STATUS_ICONS: Record<string, React.ElementType> = {
-  done: Check,
-  running: RefreshCw,
-  pending: Clock,
-  failed: X,
-  skipped: SkipForward,
+  [PhaseStatusValue.Done]: Check,
+  [PhaseStatusValue.Running]: RefreshCw,
+  [PhaseStatusValue.Pending]: Clock,
+  [PhaseStatusValue.Failed]: X,
+  [PhaseStatusValue.Skipped]: SkipForward,
 };
 
 const DEFAULT_PHASE_ICON = Clock;
@@ -167,7 +169,7 @@ function getPhaseMainTask(phase: PhaseInfo, cost: number): PhaseTaskRow {
   return {
     id: getPhaseItemValue(phase),
     title: `${phase.label} phase`,
-    status: PHASE_TO_TASK_STATUS[phase.status] ?? 'pending',
+    status: PHASE_TO_TASK_STATUS[phase.status] ?? TaskStatusValue.Pending,
     cost,
   };
 }
@@ -196,7 +198,8 @@ export function TaskAccordion({ phases, steps, tasks, agents, onSelectTask, onSe
         const phaseCost = getPhaseCost(phase, stepTasksMap, steps, agents);
         const mainTask = hasSubtasks ? null : getPhaseMainTask(phase, phaseCost);
         const itemValue = getPhaseItemValue(phase);
-        const phaseStatusLabel = phase.status === 'done' ? 'Completed' : capitalize(phase.status);
+        const phaseStatusLabel =
+          phase.status === PhaseStatusValue.Done ? 'Completed' : capitalize(phase.status);
 
         return (
           <AccordionItem key={itemValue} value={itemValue} className="bg-muted/40 rounded-lg px-1 mb-2 border border-border/50">
@@ -208,7 +211,7 @@ export function TaskAccordion({ phases, steps, tasks, agents, onSelectTask, onSe
                   <span className="font-semibold text-base">{phase.label}</span>
                   {hasSubtasks && (
                     <span className="text-sm text-muted-foreground">
-                      ({tasks.filter((t) => t.status === 'completed').length}/{tasks.length})
+                      ({tasks.filter((t) => t.status === TaskStatusValue.Completed).length}/{tasks.length})
                     </span>
                   )}
                   {phase.model && (

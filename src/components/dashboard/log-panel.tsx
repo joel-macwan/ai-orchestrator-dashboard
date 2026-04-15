@@ -137,14 +137,14 @@ const ACCENT_STYLES: Record<
   AccentVariant,
   { border: string; bg: string; hover: string; text: string; expandedBg: string }
 > = {
-  start: {
+  [LogAction.Start]: {
     border: 'border-chart-3/40',
     bg: 'bg-chart-3/10',
     hover: 'hover:bg-chart-3/15',
     text: 'text-chart-3',
     expandedBg: 'bg-chart-3/20',
   },
-  complete: {
+  [LogAction.Complete]: {
     border: 'border-chart-4/40',
     bg: 'bg-chart-4/10',
     hover: 'hover:bg-chart-4/15',
@@ -156,7 +156,7 @@ const ACCENT_STYLES: Record<
 function AccentRow({ entry, variant }: { entry: LogEntry; variant: AccentVariant }) {
   const [expanded, setExpanded] = useState(false);
   const styles = ACCENT_STYLES[variant];
-  const Icon = variant === 'start' ? Play : CheckCircle2;
+  const Icon = variant === LogAction.Start ? Play : CheckCircle2;
 
   const toggleExpanded = useCallback(() => {
     setExpanded((prev) => !prev);
@@ -245,10 +245,10 @@ function LogRow({ entry, nextEntry }: { entry: LogEntry; nextEntry?: LogEntry })
     return <ToolUseRow entry={entry} nextEntry={nextEntry} />;
   }
   if (entry.action === LogAction.Start) {
-    return <AccentRow entry={entry} variant="start" />;
+    return <AccentRow entry={entry} variant={LogAction.Start} />;
   }
   if (entry.action === LogAction.Complete || entry.action === LogAction.SessionEnd) {
-    return <AccentRow entry={entry} variant="complete" />;
+    return <AccentRow entry={entry} variant={LogAction.Complete} />;
   }
   return <StandardLogRow entry={entry} />;
 }

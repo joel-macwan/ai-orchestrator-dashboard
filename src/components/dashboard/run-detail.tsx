@@ -9,7 +9,13 @@ import { LogPanel } from './log-panel';
 import { MarkdownViewer } from '@/components/ui/markdown-viewer';
 import { usePolling } from '@/hooks/use-polling';
 import { fetchRunDetail, fetchTaskLogs, fetchPhaseLogs } from '@/lib/api';
-import { RUN_HEADER_STATUS_STYLES } from '@/lib/constants';
+import {
+  LogTargetType,
+  RUN_HEADER_STATUS_STYLES,
+  RunStatusValue,
+  StepStatusValue,
+  TaskStatusValue,
+} from '@/lib/constants';
 import { capitalize } from '@/lib/format';
 import type { LogEntry, RunDetailProps, LogTarget, RunState } from '@/lib/types';
 import { GitBranch, Loader2 } from 'lucide-react';
@@ -23,16 +29,16 @@ const SECTION_TITLE_CLASSES = 'text-sm font-medium uppercase tracking-wider text
 /** Derive the overall run status from the run state. */
 function deriveRunStatus(state: RunState): string {
   // Authoritative: orchestrator's top-level status on tasks.json.
-  if (state.status === 'completed') return 'completed';
-  if (state.status === 'failed') return 'failed';
-  if (state.status === 'in_progress') return 'running';
+  if (state.status === StepStatusValue.Completed) return RunStatusValue.Completed;
+  if (state.status === StepStatusValue.Failed) return RunStatusValue.Failed;
+  if (state.status === StepStatusValue.InProgress) return RunStatusValue.Running;
 
-  const hasFailed = state.tasks.some((t) => t.status === 'failed');
+  const hasFailed = state.tasks.some((t) => t.status === TaskStatusValue.Failed);
   if (state.completedAt) {
-    return hasFailed ? 'failed' : 'completed';
+    return hasFailed ? RunStatusValue.Failed : RunStatusValue.Completed;
   }
-  const hasInProgress = state.tasks.some((t) => t.status === 'in_progress');
-  return hasInProgress ? 'running' : 'pending';
+  const hasInProgress = state.tasks.some((t) => t.status === TaskStatusValue.InProgress);
+  return hasInProgress ? RunStatusValue.Running : RunStatusValue.Pending;
 }
 
 // ─── Run Detail ────────────────────────────────────────────────────────────
@@ -50,7 +56,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   // Fetch logs for the selected task/phase
   const logsFetcher = useCallback((): Promise<LogEntry[]> => {
     if (!logTarget) return Promise.resolve([]);
-    if (logTarget.type === 'task') {
+    if (logTarget.type === LogTargetType.Task) {
       return fetchTaskLogs(projectId, ticketId, logTarget.taskId);
     }
     return fetchPhaseLogs(projectId, ticketId, logTarget.phase);
@@ -66,11 +72,11 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
 
   // Log panel handlers
   const loadTaskLogs = useCallback((taskId: string) => {
-    setLogTarget({ type: 'task', taskId });
+    setLogTarget({ type: LogTargetType.Task, taskId });
   }, []);
 
   const loadPhaseLogs = useCallback((phase: string) => {
-    setLogTarget({ type: 'phase', phase });
+    setLogTarget({ type: LogTargetType.Phase, phase });
   }, []);
 
   const closeLogs = useCallback(() => {
@@ -86,7 +92,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   // Derived log panel metadata
   const logTitle = useMemo(() => {
     if (!logTarget) return '';
-    if (logTarget.type === 'task') {
+    if (logTarget.type === LogTargetType.Task) {
       return `Task: ${logTarget.taskId}`;
     }
     return `Phase: ${logTarget.phase}`;
@@ -94,7 +100,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
 
   const logResult = useMemo(() => {
     if (!logTarget || !detail) return undefined;
-    if (logTarget.type === 'task') {
+    if (logTarget.type === LogTargetType.Task) {
       return detail.state.tasks.find((t) => t.id === logTarget.taskId)?.result;
     }
     return detail.state.steps.find((s) => s.id === logTarget.phase)?.result;
@@ -130,7 +136,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   // ─── Derived state ────────────────────────────────────────────────────
 
   const runStatus = deriveRunStatus(detail.state);
-  const isRunning = runStatus === 'running';
+  const isRunning = runStatus === RunStatusValue.Running;
   const statusStyle = RUN_HEADER_STATUS_STYLES[runStatus] ?? '';
 
   // ─── Render ───────────────────────────────────────────────────────────

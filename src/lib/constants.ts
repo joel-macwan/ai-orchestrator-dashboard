@@ -78,6 +78,39 @@ export const LOCALE = 'en-US';
 
 export const TOOL_DURATION_MS_THRESHOLD = 1000;
 
+// ─── Task / Step Status ─────────────────────────────────────────────────────
+
+export const TaskStatusValue = {
+  Pending: 'pending',
+  InProgress: 'in_progress',
+  Completed: 'completed',
+  Failed: 'failed',
+  Blocked: 'blocked',
+} as const;
+
+export const StepStatusValue = {
+  Pending: 'pending',
+  InProgress: 'in_progress',
+  Completed: 'completed',
+  Failed: 'failed',
+  Skipped: 'skipped',
+} as const;
+
+export const PhaseStatusValue = {
+  Pending: 'pending',
+  Running: 'running',
+  Done: 'done',
+  Failed: 'failed',
+  Skipped: 'skipped',
+} as const;
+
+export const RunStatusValue = {
+  Running: 'running',
+  Completed: 'completed',
+  Failed: 'failed',
+  Pending: 'pending',
+} as const;
+
 // ─── Log Actions ────────────────────────────────────────────────────────────
 
 export const LogAction = {
@@ -116,6 +149,13 @@ export const ToolName = {
   WebSearch: 'WebSearch',
 } as const;
 
+// ─── Log Target Types ───────────────────────────────────────────────────────
+
+export const LogTargetType = {
+  Task: 'task',
+  Phase: 'phase',
+} as const;
+
 // ─── Phase Accordion ────────────────────────────────────────────────────────
 
 /** Prefix for accordion item values that represent pipeline steps. */
@@ -126,17 +166,17 @@ export const PHASE_ACCORDION_PREFIX = 'phase-';
 // ─── Run Status Styles ──────────────────────────────────────────────────────
 
 export const RUN_STATUS_BADGE_STYLES: Record<RunSummary['status'], string> = {
-  running: 'bg-amber-400 text-black border-border',
-  completed: 'bg-chart-4 text-black border-border',
-  failed: 'bg-red-500 text-white border-border',
-  pending: 'bg-muted text-muted-foreground border-border',
+  [RunStatusValue.Running]: 'bg-amber-400 text-black border-border',
+  [RunStatusValue.Completed]: 'bg-chart-4 text-black border-border',
+  [RunStatusValue.Failed]: 'bg-red-500 text-white border-border',
+  [RunStatusValue.Pending]: 'bg-muted text-muted-foreground border-border',
 };
 
 export const RUN_STATUS_COLORS: Record<RunSummary['status'], string> = {
-  running: 'text-amber-400',
-  completed: 'text-chart-4',
-  failed: 'text-red-500',
-  pending: 'text-muted-foreground',
+  [RunStatusValue.Running]: 'text-amber-400',
+  [RunStatusValue.Completed]: 'text-chart-4',
+  [RunStatusValue.Failed]: 'text-red-500',
+  [RunStatusValue.Pending]: 'text-muted-foreground',
 };
 
 // ─── Task Status Config ─────────────────────────────────────────────────────
@@ -145,27 +185,27 @@ export const TASK_STATUS_CONFIG: Record<
   TaskStatus,
   { label: string; variant: BadgeVariant; className: string }
 > = {
-  completed: {
+  [TaskStatusValue.Completed]: {
     label: 'Completed',
     variant: 'outline',
     className: 'bg-chart-4 text-black border-border',
   },
-  in_progress: {
+  [TaskStatusValue.InProgress]: {
     label: 'Running',
     variant: 'outline',
     className: 'bg-secondary text-secondary-foreground border-border',
   },
-  pending: {
+  [TaskStatusValue.Pending]: {
     label: 'Pending',
     variant: 'outline',
     className: 'bg-muted text-muted-foreground border-border',
   },
-  failed: {
+  [TaskStatusValue.Failed]: {
     label: 'Failed',
     variant: 'outline',
     className: 'bg-destructive text-destructive-foreground dark:text-white border-border',
   },
-  blocked: {
+  [TaskStatusValue.Blocked]: {
     label: 'Blocked',
     variant: 'outline',
     className: 'bg-secondary text-secondary-foreground border-border',
@@ -173,48 +213,48 @@ export const TASK_STATUS_CONFIG: Record<
 };
 
 export const TASK_STATUS_ORDER: Record<TaskStatus, number> = {
-  in_progress: 0,
-  pending: 1,
-  blocked: 2,
-  completed: 3,
-  failed: 4,
+  [TaskStatusValue.InProgress]: 0,
+  [TaskStatusValue.Pending]: 1,
+  [TaskStatusValue.Blocked]: 2,
+  [TaskStatusValue.Completed]: 3,
+  [TaskStatusValue.Failed]: 4,
 };
 
 // ─── Phase Status Styles ────────────────────────────────────────────────────
 
 export const PHASE_STATUS_ICON_STYLES: Record<string, string> = {
-  done: 'text-chart-4',
-  running: 'text-amber-400 animate-spin',
-  pending: 'text-muted-foreground',
-  failed: 'text-red-500',
-  skipped: 'text-muted-foreground',
+  [PhaseStatusValue.Done]: 'text-chart-4',
+  [PhaseStatusValue.Running]: 'text-amber-400 animate-spin',
+  [PhaseStatusValue.Pending]: 'text-muted-foreground',
+  [PhaseStatusValue.Failed]: 'text-red-500',
+  [PhaseStatusValue.Skipped]: 'text-muted-foreground',
 };
 
 export const PHASE_STATUS_BADGE_STYLES: Record<string, string> = {
-  done: 'bg-chart-4 text-black border-border',
-  running: 'bg-amber-400 text-black border-border',
-  failed: 'bg-red-500 text-white border-border',
-  pending: 'bg-muted text-muted-foreground border-border',
-  skipped: 'bg-muted text-muted-foreground border-border',
+  [PhaseStatusValue.Done]: 'bg-chart-4 text-black border-border',
+  [PhaseStatusValue.Running]: 'bg-amber-400 text-black border-border',
+  [PhaseStatusValue.Failed]: 'bg-red-500 text-white border-border',
+  [PhaseStatusValue.Pending]: 'bg-muted text-muted-foreground border-border',
+  [PhaseStatusValue.Skipped]: 'bg-muted text-muted-foreground border-border',
 };
 
 // ─── Run Status Header Styles ───────────────────────────────────────────────
 
 export const RUN_HEADER_STATUS_STYLES: Record<string, string> = {
-  running: 'bg-amber-400 text-black border-border',
-  completed: 'bg-chart-4 text-black border-border',
-  failed: 'bg-red-500 text-white border-border',
-  pending: 'bg-muted text-muted-foreground border-border',
+  [RunStatusValue.Running]: 'bg-amber-400 text-black border-border',
+  [RunStatusValue.Completed]: 'bg-chart-4 text-black border-border',
+  [RunStatusValue.Failed]: 'bg-red-500 text-white border-border',
+  [RunStatusValue.Pending]: 'bg-muted text-muted-foreground border-border',
 };
 
 // ─── Phase Status → Task Status ─────────────────────────────────────────────
 
 export const PHASE_TO_TASK_STATUS: Record<string, TaskStatus> = {
-  done: 'completed',
-  running: 'in_progress',
-  pending: 'pending',
-  failed: 'failed',
-  skipped: 'pending',
+  [PhaseStatusValue.Done]: TaskStatusValue.Completed,
+  [PhaseStatusValue.Running]: TaskStatusValue.InProgress,
+  [PhaseStatusValue.Pending]: TaskStatusValue.Pending,
+  [PhaseStatusValue.Failed]: TaskStatusValue.Failed,
+  [PhaseStatusValue.Skipped]: TaskStatusValue.Pending,
 };
 
 // ─── Recent Logs Display ────────────────────────────────────────────────────
