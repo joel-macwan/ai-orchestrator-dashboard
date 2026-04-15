@@ -1,19 +1,13 @@
-import ReactMarkdown from 'react-markdown';
+import { memo } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import type { MarkdownViewerProps } from '@/lib/types';
 
-/**
- * Renders agent-produced markdown reports (planner output, reviewer summary,
- * test-writer notes, codacy report, worker results). Styled to fit alongside
- * the log stream — compact, monospace code, GFM tables.
- */
-export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
-  return (
-    <div className={cn('text-sm leading-relaxed text-foreground', className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
+// Hoisted to module scope so react-markdown sees a stable `components`
+// reference — otherwise every render builds a new object and triggers
+// unnecessary reconciliation of the entire rendered tree.
+const MARKDOWN_COMPONENTS: Components = {
           h1: ({ children }) => (
             <h1 className="text-lg font-bold mt-4 mb-2 first:mt-0">{children}</h1>
           ),
@@ -94,11 +88,19 @@ export function MarkdownViewer({ content, className }: MarkdownViewerProps) {
           th: ({ children }) => (
             <th className="px-2 py-1.5 text-left font-semibold">{children}</th>
           ),
-          td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
-        }}
-      >
+  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
+};
+
+const REMARK_PLUGINS = [remarkGfm];
+
+function MarkdownViewerImpl({ content, className }: MarkdownViewerProps) {
+  return (
+    <div className={cn('text-sm leading-relaxed text-foreground', className)}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
         {content}
       </ReactMarkdown>
     </div>
   );
 }
+
+export const MarkdownViewer = memo(MarkdownViewerImpl);

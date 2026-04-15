@@ -29,6 +29,8 @@ import { capitalize } from '@/lib/format';
 import type { LogEntry, RunDetailProps, LogTarget, RunState } from '@/lib/types';
 import { GitBranch, Loader2 } from 'lucide-react';
 
+const EMPTY_LOGS: LogEntry[] = [];
+
 // ─── Section Title (shared style for card headers) ─────────────────────────
 
 const SECTION_TITLE_CLASSES = 'text-sm font-medium uppercase tracking-wider text-muted-foreground';
@@ -63,7 +65,15 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
     () => fetchRunDetail(projectId, ticketId),
     [projectId, ticketId]
   );
-  const { data: detail, loading, error } = usePolling(fetcher);
+  // We need an initial poll even for terminal runs, so enable stays true
+  // until the first payload arrives. After that, disable polling once the
+  // orchestrator reports a terminal status to avoid pointless background work.
+  const [detailPollEnabled, setDetailPollEnabled] = useState(true);
+  const { data: detail, loading, error } = usePolling(fetcher, detailPollEnabled);
+  const isInProgress = detail?.state.status === StepStatusValue.InProgress;
+  useEffect(() => {
+    if (detail) setDetailPollEnabled(isInProgress);
+  }, [detail, isInProgress]);
 
   // Fetch logs for the selected task/phase
   const logsFetcher = useCallback((): Promise<LogEntry[]> => {
@@ -82,7 +92,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
     () => fetchContextFiles(projectId, ticketId),
     [projectId, ticketId]
   );
-  const { data: contextFiles } = usePolling(contextFilesFetcher);
+  const { data: contextFiles } = usePolling(contextFilesFetcher, isInProgress);
 
   // Load selected context file content
   useEffect(() => {
@@ -121,9 +131,9 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
 
   const { data: polledLogs, loading: logsLoading } = usePolling(
     logsFetcher,
-    isLogPanelOpen
+    isLogPanelOpen && isInProgress
   );
-  const logs = polledLogs ?? [];
+  const logs = polledLogs ?? EMPTY_LOGS;
 
   // Log panel handlers
   const loadTaskLogs = useCallback((taskId: string) => {
@@ -190,9 +200,12 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
 
   // ─── Derived state ────────────────────────────────────────────────────
 
+  // Compute all derived values up-front so JSX has no inline conditionals.
   const runStatus = deriveRunStatus(detail.state);
   const isRunning = runStatus === RunStatusValue.Running;
   const statusStyle = RUN_HEADER_STATUS_STYLES[runStatus] ?? '';
+  const statusBadgeClassName = `text-xs ${statusStyle}`;
+  const statusLabel = isRunning ? 'Running' : capitalize(runStatus);
 
   // ─── Render ───────────────────────────────────────────────────────────
 
@@ -202,14 +215,15 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
       <div className="space-y-1.5">
         <div className="flex items-center gap-3">
           <h2 className="text-2xl font-bold tracking-tight">{detail.state.ticketId}</h2>
-          <Badge variant="outline" className={`text-xs ${statusStyle}`}>
+          <Badge variant="outline" className={statusBadgeClassName}>
+            {/* Pulsing dot is only shown while the run is actively running. */}
             {isRunning && (
               <span className="relative flex h-2 w-2 mr-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
               </span>
             )}
-            {isRunning ? 'Running' : capitalize(runStatus)}
+            {statusLabel}
           </Badge>
         </div>
         <MarkdownViewer

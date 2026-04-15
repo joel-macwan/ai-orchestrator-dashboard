@@ -125,7 +125,7 @@ export function DirectoryBrowser({ open, onClose, onSelect }: DirectoryBrowserPr
                 <button
                   key={entry.path}
                   onClick={() => handleNavigate(entry.path)}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-blue-500/20 hover:text-blue-500"
                 >
                   <Folder className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{entry.name}</span>

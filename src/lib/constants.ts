@@ -13,7 +13,7 @@ export const ApiRoute = {
 
 // ─── Polling ────────────────────────────────────────────────────────────────
 
-export const POLL_INTERVAL_MS = 1000;
+export const POLL_INTERVAL_MS = 5000;
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Sidebar,
   SidebarContent,
@@ -58,9 +58,64 @@ const RUN_ITEM_CLASSES = [
 
 // ─── Project Runs Section ───────────────────────────────────────────────────
 
+type RunRowProps = {
+  run: RunSummary;
+  isActive: boolean;
+  onSelect: (ticketId: string) => void;
+};
+
+function RunRow({ run, isActive, onSelect }: RunRowProps) {
+  const handleClick = useCallback(() => {
+    onSelect(run.ticketId);
+  }, [onSelect, run.ticketId]);
+
+  const StatusIcon = RUN_STATUS_ICONS[run.status];
+  const statusColor = RUN_STATUS_COLORS[run.status];
+  const isRunning = run.status === RunStatusValue.Running;
+  const spinClass = isRunning ? 'animate-spin' : '';
+  const iconClassName = `h-4 w-4 mt-0.5 shrink-0 ${statusColor} ${spinClass}`;
+  const badgeClassName = `text-[10px] h-4 ${RUN_STATUS_BADGE_STYLES[run.status]}`;
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={handleClick}
+        className={RUN_ITEM_CLASSES}
+      >
+        <StatusIcon className={iconClassName} />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm truncate">{run.ticketId}</div>
+          <div className="text-xs text-muted-foreground truncate">
+            {run.description}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge variant="outline" className={badgeClassName}>
+              {capitalize(run.status)}
+            </Badge>
+            <span className="text-[10px] text-muted-foreground">
+              {formatRelativeTime(run.startedAt)}
+            </span>
+            <span className="text-xs font-semibold ml-auto">
+              {formatCost(run.totalCostUsd)}
+            </span>
+          </div>
+        </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
 function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRunsProps) {
   const fetcher = useCallback(() => fetchRuns(project.id), [project.id]);
-  const { data: runs } = usePolling(fetcher);
+  const [pollEnabled, setPollEnabled] = useState(true);
+  const { data: runs } = usePolling(fetcher, pollEnabled);
+
+  // Keep polling while any run is still running; stop once all are terminal.
+  const hasRunning = runs?.some((r) => r.status === RunStatusValue.Running) ?? true;
+  useEffect(() => {
+    setPollEnabled(hasRunning);
+  }, [hasRunning]);
 
   const handleRemove = useCallback(() => {
     onRemove(project.id);
@@ -71,6 +126,7 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
   }, [project.id, onSelectRun]);
 
   const hasRuns = runs && runs.length > 0;
+  const deleteButtonClassName = `${ICON_BUTTON_BASE} bg-red-500/10 text-red-500 hover:bg-red-500/20`;
 
   return (
     <SidebarGroup>
@@ -79,7 +135,7 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
         <span className="truncate">{project.name}</span>
         <button
           onClick={handleRemove}
-          className={`${ICON_BUTTON_BASE} bg-red-500/10 text-red-500 hover:bg-red-500/20`}
+          className={deleteButtonClassName}
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -88,40 +144,14 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
       {/* List of runs for this project */}
       <SidebarGroupContent>
         <SidebarMenu>
-          {runs?.map((run) => {
-            const StatusIcon = RUN_STATUS_ICONS[run.status];
-            const statusColor = RUN_STATUS_COLORS[run.status];
-            const isRunning = run.status === RunStatusValue.Running;
-
-            return (
-              <SidebarMenuItem key={run.ticketId}>
-                <SidebarMenuButton
-                  isActive={selectedRun === run.ticketId}
-                  onClick={() => handleSelectRun(run.ticketId)}
-                  className={RUN_ITEM_CLASSES}
-                >
-                  <StatusIcon className={`h-4 w-4 mt-0.5 shrink-0 ${statusColor} ${isRunning ? 'animate-spin' : ''}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{run.ticketId}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {run.description}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className={`text-[10px] h-4 ${RUN_STATUS_BADGE_STYLES[run.status]}`}>
-                        {capitalize(run.status)}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {formatRelativeTime(run.startedAt)}
-                      </span>
-                      <span className="text-xs font-semibold ml-auto">
-                        {formatCost(run.totalCostUsd)}
-                      </span>
-                    </div>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
+          {runs?.map((run) => (
+            <RunRow
+              key={run.ticketId}
+              run={run}
+              isActive={selectedRun === run.ticketId}
+              onSelect={handleSelectRun}
+            />
+          ))}
           {!hasRuns && (
             <p className="px-3 py-2 text-xs text-muted-foreground">No runs found</p>
           )}
@@ -136,7 +166,7 @@ function ProjectRuns({ project, selectedRun, onSelectRun, onRemove }: ProjectRun
 export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onProjectRemoved }: AppSidebarProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
-  const { data: projects, refresh } = usePolling(fetchProjects);
+  const { data: projects, refresh } = usePolling(fetchProjects, false);
 
   const hasProjects = projects && projects.length > 0;
   const isDeleteDialogOpen = projectToDelete !== null;
@@ -209,16 +239,21 @@ export function AppSidebar({ selectedProjectId, selectedRunId, onSelectRun, onPr
             <div className="mt-2 border-t border-sidebar-border" />
           </SidebarGroup>
 
-          {/* Project list with their runs */}
-          {projects?.map((project) => (
-            <ProjectRuns
-              key={project.id}
-              project={project}
-              selectedRun={selectedProjectId === project.id ? selectedRunId : null}
-              onSelectRun={onSelectRun}
-              onRemove={requestRemoveProject}
-            />
-          ))}
+          {/* Project list with their runs. For each project, only forward
+              `selectedRunId` if it belongs to the currently selected project. */}
+          {projects?.map((project) => {
+            const selectedRunForProject =
+              selectedProjectId === project.id ? selectedRunId : null;
+            return (
+              <ProjectRuns
+                key={project.id}
+                project={project}
+                selectedRun={selectedRunForProject}
+                onSelectRun={onSelectRun}
+                onRemove={requestRemoveProject}
+              />
+            );
+          })}
 
           {/* Empty state when no projects exist */}
           {!hasProjects && (
