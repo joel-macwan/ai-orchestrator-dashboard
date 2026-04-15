@@ -45,6 +45,8 @@ export interface RunState {
   baseBranch: string;
   branch: string;
   worktreePath?: string;
+  /** Absolute path to the folder of files the planner used as context. */
+  contextFolder?: string;
   /** Overall loop status from the orchestrator (authoritative). */
   status?: StepStatus;
   tasks: AgentTask[];
@@ -111,6 +113,34 @@ export interface RunDetail {
   agents: AgentInfo[];
   recentLogs: LogEntry[];
   totalBudget: number;
+}
+
+export interface ContextFile {
+  name: string;
+  relativePath: string;
+  sizeBytes: number;
+}
+
+export interface ContextFileContent {
+  relativePath: string;
+  content: string;
+}
+
+export interface ContextFilePanelProps {
+  file: ContextFile;
+  content: string | null;
+  loading: boolean;
+  onClose: () => void;
+}
+
+export interface ContextFileTileProps {
+  file: ContextFile;
+  onSelect: (file: ContextFile) => void;
+}
+
+export interface ContextFilesListProps {
+  files: ContextFile[];
+  onSelect: (file: ContextFile) => void;
 }
 
 export interface DirectoryListing {

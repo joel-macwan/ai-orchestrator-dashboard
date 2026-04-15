@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,9 +6,18 @@ import { StatCards } from './stat-cards';
 import { PhaseStepper } from './phase-stepper';
 import { TaskAccordion } from './task-accordion';
 import { LogPanel } from './log-panel';
+import { ContextFilePanel } from './context-file-panel';
+import { ContextFilesList } from './context-files-list';
 import { MarkdownViewer } from '@/components/ui/markdown-viewer';
 import { usePolling } from '@/hooks/use-polling';
-import { fetchRunDetail, fetchTaskLogs, fetchPhaseLogs } from '@/lib/api';
+import {
+  fetchRunDetail,
+  fetchTaskLogs,
+  fetchPhaseLogs,
+  fetchContextFiles,
+  fetchContextFileContent,
+} from '@/lib/api';
+import type { ContextFile } from '@/lib/types';
 import {
   LogTargetType,
   RUN_HEADER_STATUS_STYLES,
@@ -45,6 +54,9 @@ function deriveRunStatus(state: RunState): string {
 
 export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   const [logTarget, setLogTarget] = useState<LogTarget>(null);
+  const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | null>(null);
+  const [contextFileContent, setContextFileContent] = useState<string | null>(null);
+  const [contextFileLoading, setContextFileLoading] = useState(false);
 
   // Fetch run detail with polling
   const fetcher = useCallback(
@@ -63,6 +75,49 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   }, [projectId, ticketId, logTarget]);
 
   const isLogPanelOpen = logTarget !== null;
+  const isContextPanelOpen = selectedContextFile !== null;
+
+  // Fetch list of context files
+  const contextFilesFetcher = useCallback(
+    () => fetchContextFiles(projectId, ticketId),
+    [projectId, ticketId]
+  );
+  const { data: contextFiles } = usePolling(contextFilesFetcher);
+
+  // Load selected context file content
+  useEffect(() => {
+    if (!selectedContextFile) {
+      setContextFileContent(null);
+      return;
+    }
+    let cancelled = false;
+    setContextFileLoading(true);
+    fetchContextFileContent(projectId, ticketId, selectedContextFile.relativePath)
+      .then((res) => {
+        if (!cancelled) setContextFileContent(res.content);
+      })
+      .catch(() => {
+        if (!cancelled) setContextFileContent(null);
+      })
+      .finally(() => {
+        if (!cancelled) setContextFileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, ticketId, selectedContextFile]);
+
+  const openContextFile = useCallback((file: ContextFile) => {
+    setSelectedContextFile(file);
+  }, []);
+
+  const closeContextFile = useCallback(() => {
+    setSelectedContextFile(null);
+  }, []);
+
+  const handleContextSheetChange = useCallback((isOpen: boolean) => {
+    if (!isOpen) closeContextFile();
+  }, [closeContextFile]);
 
   const { data: polledLogs, loading: logsLoading } = usePolling(
     logsFetcher,
@@ -177,6 +232,20 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
       {/* Summary stat cards */}
       <StatCards detail={detail} />
 
+      {/* Planner context files */}
+      {contextFiles && contextFiles.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className={SECTION_TITLE_CLASSES}>
+              Planner Context ({contextFiles.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ContextFilesList files={contextFiles} onSelect={openContextFile} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Pipeline progress stepper */}
       <Card>
         <CardHeader className="pb-3">
@@ -224,6 +293,24 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
             onClose={closeLogs}
             result={logResult}
           />
+        </SheetContent>
+      </Sheet>
+
+      {/* Slide-out context file panel */}
+      <Sheet open={isContextPanelOpen} onOpenChange={handleContextSheetChange}>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="w-full p-0 data-[side=right]:sm:max-w-4xl"
+        >
+          {selectedContextFile && (
+            <ContextFilePanel
+              file={selectedContextFile}
+              content={contextFileContent}
+              loading={contextFileLoading}
+              onClose={closeContextFile}
+            />
+          )}
         </SheetContent>
       </Sheet>
     </>

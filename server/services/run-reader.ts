@@ -13,6 +13,7 @@ import type {
   AgentTask,
   RunSummary,
   RunDetail,
+  ContextFile,
 } from '../types.js';
 import {
   AGENT_STATUS_ORDER,
@@ -122,6 +123,7 @@ function normalizeRunState(raw: RawRunState): RunState {
     baseBranch: raw.baseBranch,
     branch: raw.branch,
     worktreePath: raw.worktreePath,
+    contextFolder: raw.contextFolder,
     status: raw.status,
     steps: raw.steps ?? [],
     tasks: collectTasks(raw.steps ?? []),
@@ -493,6 +495,70 @@ export function getTaskLogs(runsPath: string, ticketId: string, taskId: string):
     ?.flatMap((s) => s.tasks ?? [])
     .find((t) => t.id === taskId);
   return withFullCompleteMessage(entries, task?.result);
+}
+
+// ─── Context Files ──────────────────────────────────────────────────────────
+
+function getContextFolder(runsPath: string, ticketId: string): string | null {
+  const raw = readTasksJson(runsPath, ticketId);
+  const folder = raw?.contextFolder;
+  if (!folder) return null;
+  const absolute = path.resolve(folder);
+  if (fs.existsSync(absolute)) return absolute;
+  // Fallback: the recorded absolute path may be stale (e.g. the project was
+  // moved). Try the conventional sibling of the runs directory.
+  const fallback = path.resolve(runsPath, '..', path.basename(path.dirname(folder.replace(/\/$/, ''))), ticketId);
+  if (fs.existsSync(fallback)) return fallback;
+  const simpleFallback = path.resolve(runsPath, '..', 'gather', ticketId);
+  if (fs.existsSync(simpleFallback)) return simpleFallback;
+  return absolute;
+}
+
+function walkFiles(root: string, dir: string, out: ContextFile[]): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(root, full, out);
+    } else if (entry.isFile()) {
+      const rel = path.relative(root, full);
+      let sizeBytes = 0;
+      try { sizeBytes = fs.statSync(full).size; } catch { /* ignore */ }
+      out.push({ name: entry.name, relativePath: rel, sizeBytes });
+    }
+  }
+}
+
+export function listContextFiles(runsPath: string, ticketId: string): ContextFile[] {
+  const folder = getContextFolder(runsPath, ticketId);
+  if (!folder || !fs.existsSync(folder)) return [];
+  const files: ContextFile[] = [];
+  walkFiles(folder, folder, files);
+  files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  return files;
+}
+
+export function readContextFile(
+  runsPath: string,
+  ticketId: string,
+  relativePath: string
+): string | null {
+  const folder = getContextFolder(runsPath, ticketId);
+  if (!folder) return null;
+  const resolved = path.resolve(folder, relativePath);
+  const rel = path.relative(folder, resolved);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null;
+  try {
+    return fs.readFileSync(resolved, FILE_ENCODING);
+  } catch {
+    return null;
+  }
 }
 
 export function getPhaseLogs(runsPath: string, ticketId: string, phase: string): LogEntry[] {

@@ -4,6 +4,8 @@ import type {
   RunDetail,
   LogEntry,
   DirectoryListing,
+  ContextFile,
+  ContextFileContent,
 } from './types';
 import { API_BASE, ApiRoute } from './constants';
 
@@ -61,6 +63,25 @@ export function fetchPhaseLogs(
   phase: string
 ): Promise<LogEntry[]> {
   return fetchJson(`${ApiRoute.Runs}/${projectId}/${ticketId}/phases/${phase}/logs`);
+}
+
+// ─── Context Files ──────────────────────────────────────────────────────────
+
+export function fetchContextFiles(
+  projectId: string,
+  ticketId: string
+): Promise<ContextFile[]> {
+  return fetchJson(`${ApiRoute.Runs}/${projectId}/${ticketId}/context-files`);
+}
+
+export function fetchContextFileContent(
+  projectId: string,
+  ticketId: string,
+  relativePath: string
+): Promise<ContextFileContent> {
+  return fetchJson(
+    `${ApiRoute.Runs}/${projectId}/${ticketId}/context-files/content?path=${encodeURIComponent(relativePath)}`
+  );
 }
 
 // ─── Browse ─────────────────────────────────────────────────────────────────

@@ -67,6 +67,11 @@ export const COST_SMALL_DECIMAL_PLACES = 4;
 export const TOKEN_MILLION = 1_000_000;
 export const TOKEN_THOUSAND = 1_000;
 
+export const BYTES_PER_KB = 1024;
+export const KB_DECIMAL_PLACES = 1;
+
+export const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx'] as const;
+
 export const MS_PER_SECOND = 1000;
 export const SECONDS_PER_MINUTE = 60;
 export const SECONDS_PER_HOUR = 3600;

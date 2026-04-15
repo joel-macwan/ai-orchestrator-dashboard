@@ -53,6 +53,8 @@ export interface RawRunState {
   baseBranch: string;
   branch: string;
   worktreePath?: string;
+  /** Absolute path to the folder of files the planner used as context. */
+  contextFolder?: string;
   /** Overall loop status written by the orchestrator. */
   status?: StepStatus;
   pipelineStartedAt: string;
@@ -73,6 +75,7 @@ export interface RunState {
   baseBranch: string;
   branch: string;
   worktreePath?: string;
+  contextFolder?: string;
   /** Overall loop status from the orchestrator (authoritative). */
   status?: StepStatus;
   tasks: AgentTask[];
@@ -146,4 +149,10 @@ export interface DirectoryEntry {
   name: string;
   path: string;
   isDirectory: boolean;
+}
+
+export interface ContextFile {
+  name: string;
+  relativePath: string;
+  sizeBytes: number;
 }

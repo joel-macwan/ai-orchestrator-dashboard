@@ -1,9 +1,12 @@
 import {
+  BYTES_PER_KB,
   COST_DECIMAL_PLACES,
   COST_SMALL_DECIMAL_PLACES,
   COST_SMALL_THRESHOLD,
   HOURS_PER_DAY,
+  KB_DECIMAL_PLACES,
   LOCALE,
+  MARKDOWN_EXTENSIONS,
   MINUTES_PER_HOUR,
   MS_PER_MINUTE,
   MS_PER_SECOND,
@@ -12,6 +15,15 @@ import {
   TOKEN_MILLION,
   TOKEN_THOUSAND,
 } from './constants';
+
+export function formatKb(bytes: number): string {
+  return `${(bytes / BYTES_PER_KB).toFixed(KB_DECIMAL_PLACES)} KB`;
+}
+
+export function isMarkdownFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  return MARKDOWN_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
 
 export function formatCost(usd: number): string {
   if (usd === 0) return '$0.00';
