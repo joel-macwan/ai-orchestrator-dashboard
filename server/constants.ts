@@ -1,6 +1,8 @@
 import path from 'node:path';
-import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { TokenUsage } from './types.js';
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ export const ApiRoute = {
 
 // ─── Config Storage ─────────────────────────────────────────────────────────
 
-export const CONFIG_DIR = path.join(os.homedir(), '.ai-orchestrator');
+export const CONFIG_DIR = path.join(PROJECT_ROOT, '.data');
 export const PROJECTS_FILE = path.join(CONFIG_DIR, 'projects.json');
 
 export const JSON_INDENT = 2;
