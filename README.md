@@ -55,6 +55,15 @@ src/
   lib/
 ```
 
+## Budget tracking
+
+Budgets are read directly from each run's `tasks.json`:
+
+- `totalBudgetUsd` — powers the Cost stat card (headline cost vs. budget)
+- `maxBudgetPerTaskUsd` — powers a small circular progress ring on every task row (including single-task phases). Hover the ring for a tooltip with the raw `cost / budget` numbers.
+
+If either field is missing, the dashboard falls back to defaults defined in `server/constants.ts` (`DEFAULT_BUDGET`, `DEFAULT_MAX_BUDGET_PER_TASK`).
+
 ## API
 
 | Route | Purpose |
