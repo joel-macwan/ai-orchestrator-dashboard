@@ -444,6 +444,20 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
   const modelMap = readPipelineConfig(runsPath);
   const phases = buildPhases(state, logsDir, modelMap);
 
+  // Reconcile state.status with phase progress. The orchestrator writes
+  // tasks.json in batches and its top-level status can lag behind per-phase
+  // transitions — notably for phases with no subtasks, where there are no
+  // task-level signals to fall back on. Promoting pending → in_progress here
+  // keeps the dashboard header, polling, and badges in sync with what the
+  // phases already show.
+  const rawStatusActive =
+    state.status === StepStatusValue.Completed ||
+    state.status === StepStatusValue.Failed ||
+    state.status === StepStatusValue.InProgress;
+  if (!rawStatusActive && phases.some((p) => p.status === PhaseStatusValue.Running)) {
+    state = { ...state, status: StepStatusValue.InProgress };
+  }
+
   // Synthesize completedAt from the latest log timestamp when the orchestrator
   // reports a terminal top-level status, or (legacy fallback) every phase is
   // terminal — so the UI stops ticking even if pipelineCompletedAt is missing.

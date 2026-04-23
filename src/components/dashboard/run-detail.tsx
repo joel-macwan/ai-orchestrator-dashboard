@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,16 +17,17 @@ import {
   fetchContextFiles,
   fetchContextFileContent,
 } from '@/lib/api';
-import type { ContextFile } from '@/lib/types';
+import type { ContextFile, RunDetail } from '@/lib/types';
 import {
   LogTargetType,
+  PhaseStatusValue,
   RUN_HEADER_STATUS_STYLES,
   RunStatusValue,
   StepStatusValue,
   TaskStatusValue,
 } from '@/lib/constants';
 import { capitalize } from '@/lib/format';
-import type { LogEntry, RunDetailProps, LogTarget, RunState } from '@/lib/types';
+import type { LogEntry, PhaseInfo, RunDetailProps, LogTarget, RunState } from '@/lib/types';
 import { GitBranch, Loader2 } from 'lucide-react';
 
 const EMPTY_LOGS: LogEntry[] = [];
@@ -37,12 +38,30 @@ const SECTION_TITLE_CLASSES = 'text-sm font-medium uppercase tracking-wider text
 
 // ─── Run Status Helpers ────────────────────────────────────────────────────
 
-/** Derive the overall run status from the run state. */
-function deriveRunStatus(state: RunState): string {
+/**
+ * Derive the overall run status shown in the header badge.
+ *
+ * Phases are checked alongside state.status / tasks because a phase can be
+ * actively running before the orchestrator propagates `in_progress` to the
+ * top-level state — and phases that render as a synthetic default row (no
+ * steps) contribute no tasks, so the tasks array alone under-reports progress.
+ */
+/** Whether a run is still doing work — drives polling and the header badge. */
+function isRunActiveDetail(detail: RunDetail): boolean {
+  return (
+    detail.state.status === StepStatusValue.InProgress ||
+    detail.phases.some((p) => p.status === PhaseStatusValue.Running)
+  );
+}
+
+function deriveRunStatus(state: RunState, phases: PhaseInfo[]): string {
   // Authoritative: orchestrator's top-level status on tasks.json.
   if (state.status === StepStatusValue.Completed) return RunStatusValue.Completed;
   if (state.status === StepStatusValue.Failed) return RunStatusValue.Failed;
   if (state.status === StepStatusValue.InProgress) return RunStatusValue.Running;
+
+  const hasRunningPhase = phases.some((p) => p.status === PhaseStatusValue.Running);
+  if (hasRunningPhase) return RunStatusValue.Running;
 
   const hasFailed = state.tasks.some((t) => t.status === TaskStatusValue.Failed);
   if (state.completedAt) {
@@ -57,23 +76,27 @@ function deriveRunStatus(state: RunState): string {
 export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   const [logTarget, setLogTarget] = useState<LogTarget>(null);
   const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | null>(null);
-  const [contextFileContent, setContextFileContent] = useState<string | null>(null);
-  const [contextFileLoading, setContextFileLoading] = useState(false);
+  // Seeded to `true` so the first poll tick always runs; flipped off once a
+  // payload reports a terminal state. See `fetcher` below for the update site.
+  const [isInProgress, setIsInProgress] = useState(true);
 
-  // Fetch run detail with polling
-  const fetcher = useCallback(
-    () => fetchRunDetail(projectId, ticketId),
-    [projectId, ticketId]
-  );
-  // We need an initial poll even for terminal runs, so enable stays true
-  // until the first payload arrives. After that, disable polling once the
-  // orchestrator reports a terminal status to avoid pointless background work.
-  const [detailPollEnabled, setDetailPollEnabled] = useState(true);
-  const { data: detail, loading, error } = usePolling(fetcher, detailPollEnabled);
-  const isInProgress = detail?.state.status === StepStatusValue.InProgress;
-  useEffect(() => {
-    if (detail) setDetailPollEnabled(isInProgress);
-  }, [detail, isInProgress]);
+  // Fetch run detail with polling.
+  //
+  // An active run is one where the orchestrator's top-level status is
+  // `in_progress` OR any phase is running. We check phases because a phase
+  // can transition to running before state.status catches up — notably for
+  // phases with no subtasks, which otherwise leave badges/logs frozen until
+  // the user refreshes.
+  //
+  // Updating `isInProgress` inside the fetcher (an async callback) avoids
+  // the `react-hooks/set-state-in-effect` lint rule that fires on synchronous
+  // setState inside a useEffect body.
+  const fetcher = useCallback(async () => {
+    const result = await fetchRunDetail(projectId, ticketId);
+    setIsInProgress(isRunActiveDetail(result));
+    return result;
+  }, [projectId, ticketId]);
+  const { data: detail, loading, error } = usePolling(fetcher, isInProgress);
 
   // Fetch logs for the selected task/phase
   const logsFetcher = useCallback((): Promise<LogEntry[]> => {
@@ -94,28 +117,26 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   );
   const { data: contextFiles } = usePolling(contextFilesFetcher, isInProgress);
 
-  // Load selected context file content
-  useEffect(() => {
-    if (!selectedContextFile) {
-      setContextFileContent(null);
-      return;
+  // Load selected context file content. `usePolling` with `enabled: false`
+  // gives us a single fetch per fetcher-identity change — i.e. once per file
+  // selection, with automatic reset of `data`/`loading` on change.
+  const contextFileContentFetcher = useCallback(async (): Promise<string | null> => {
+    if (!selectedContextFile) return null;
+    try {
+      const res = await fetchContextFileContent(
+        projectId,
+        ticketId,
+        selectedContextFile.relativePath,
+      );
+      return res.content;
+    } catch {
+      return null;
     }
-    let cancelled = false;
-    setContextFileLoading(true);
-    fetchContextFileContent(projectId, ticketId, selectedContextFile.relativePath)
-      .then((res) => {
-        if (!cancelled) setContextFileContent(res.content);
-      })
-      .catch(() => {
-        if (!cancelled) setContextFileContent(null);
-      })
-      .finally(() => {
-        if (!cancelled) setContextFileLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [projectId, ticketId, selectedContextFile]);
+  const { data: contextFileContent, loading: contextFileLoading } = usePolling(
+    contextFileContentFetcher,
+    false,
+  );
 
   const openContextFile = useCallback((file: ContextFile) => {
     setSelectedContextFile(file);
@@ -201,7 +222,7 @@ export function RunDetail({ projectId, ticketId }: RunDetailProps) {
   // ─── Derived state ────────────────────────────────────────────────────
 
   // Compute all derived values up-front so JSX has no inline conditionals.
-  const runStatus = deriveRunStatus(detail.state);
+  const runStatus = deriveRunStatus(detail.state, detail.phases);
   const isRunning = runStatus === RunStatusValue.Running;
   const statusStyle = RUN_HEADER_STATUS_STYLES[runStatus] ?? '';
   const statusBadgeClassName = `text-xs ${statusStyle}`;
