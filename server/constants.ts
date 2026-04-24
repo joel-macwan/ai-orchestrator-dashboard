@@ -98,11 +98,6 @@ export const LogAction = {
   Phase: 'phase',
 } as const;
 
-// ─── Phase Display ──────────────────────────────────────────────────────────
-
-export const GIT_SETUP_PHASE_ID = 1;
-export const GIT_SETUP_LABEL = 'Git Setup';
-
 export const ORCHESTRATOR_AGENT = 'orchestrator';
 
 // ─── Agent Status Order ─────────────────────────────────────────────────────

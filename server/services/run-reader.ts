@@ -24,8 +24,6 @@ import {
   DEFAULT_DESCRIPTION,
   FILE_ENCODING,
   GIT_BRANCH_PATTERN,
-  GIT_SETUP_LABEL,
-  GIT_SETUP_PHASE_ID,
   LogAction,
   ORCHESTRATOR_AGENT,
   ORCHESTRATOR_LOG_FILE,
@@ -224,8 +222,7 @@ export function listRuns(runsPath: string): RunSummary[] {
 
     if (raw) {
       const state = normalizeRunState(raw);
-      const logsDir = path.join(runDir, RUN_FILES.logsDir);
-      const phases = buildPhases(state, logsDir);
+      const phases = buildPhases(state);
       runs.push({
         ticketId: state.ticketId,
         description: state.description,
@@ -267,40 +264,19 @@ function hasAction(entries: LogEntry[], ...actions: string[]): boolean {
 }
 
 /**
- * Build the dashboard phase list. Phase 1 is always Git Setup (derived from
- * the orchestrator log). Phases 2..N mirror whatever steps appear in
- * tasks.json so the dashboard stays in sync with pipeline.json without
- * having to duplicate it.
+ * Build the dashboard phase list. Every phase — including `git-setup` — comes
+ * from `tasks.json` `steps[]` so completion is decided by a single rule:
+ * `step.status` mapped through `phaseStatusFromStep`. Logs are not consulted.
  */
-function buildPhases(state: RunState | null, logsDir: string, modelMap?: Map<string, string>): PhaseInfo[] {
-  const orchEntries = readJsonl(path.join(logsDir, ORCHESTRATOR_LOG_FILE));
-  const gitDone = orchEntries.some((e) => e.action === LogAction.Git);
-  const gitRunning = orchEntries.length > 0 && !gitDone;
-
-  const phases: PhaseInfo[] = [
-    {
-      id: GIT_SETUP_PHASE_ID,
-      label: GIT_SETUP_LABEL,
-      status: gitDone
-        ? PhaseStatusValue.Done
-        : gitRunning
-          ? PhaseStatusValue.Running
-          : PhaseStatusValue.Pending,
-    },
-  ];
-
+function buildPhases(state: RunState | null, modelMap?: Map<string, string>): PhaseInfo[] {
   const steps = state?.steps ?? [];
-  steps.forEach((step, idx) => {
-    phases.push({
-      id: idx + 2,
-      label: humanizeStepId(step.id),
-      status: phaseStatusFromStep(step.status),
-      stepId: step.id,
-      model: modelMap?.get(step.id),
-    });
-  });
-
-  return phases;
+  return steps.map((step, idx) => ({
+    id: idx + 1,
+    label: humanizeStepId(step.id),
+    status: phaseStatusFromStep(step.status),
+    stepId: step.id,
+    model: modelMap?.get(step.id),
+  }));
 }
 
 // ─── Pipeline Config ───────────────────────────────────────────────────────
@@ -442,7 +418,7 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
   state = { ...state, totalCostUsd: totalFromLogs };
 
   const modelMap = readPipelineConfig(runsPath);
-  const phases = buildPhases(state, logsDir, modelMap);
+  const phases = buildPhases(state, modelMap);
 
   // Reconcile state.status with phase progress. The orchestrator writes
   // tasks.json in batches and its top-level status can lag behind per-phase
