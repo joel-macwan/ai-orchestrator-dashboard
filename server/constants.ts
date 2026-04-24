@@ -48,10 +48,6 @@ export const RUN_FILES = {
   workerLogPrefix: 'worker-',
 } as const;
 
-// ─── Log File Names ─────────────────────────────────────────────────────────
-
-export const ORCHESTRATOR_LOG_FILE = 'orchestrator.jsonl';
-
 // ─── Task / Step / Phase / Run Status ───────────────────────────────────────
 
 export const TaskStatusValue = {
@@ -98,31 +94,3 @@ export const LogAction = {
   Phase: 'phase',
 } as const;
 
-export const ORCHESTRATOR_AGENT = 'orchestrator';
-
-// ─── Agent Status Order ─────────────────────────────────────────────────────
-
-export const AgentStatusValue = {
-  Running: 'running',
-  Pending: 'pending',
-  Done: 'done',
-  Failed: 'failed',
-} as const;
-
-export const AGENT_STATUS_ORDER: Record<string, number> = {
-  [AgentStatusValue.Running]: 0,
-  [AgentStatusValue.Pending]: 1,
-  [AgentStatusValue.Done]: 2,
-  [AgentStatusValue.Failed]: 3,
-};
-
-// ─── Description Defaults ───────────────────────────────────────────────────
-
-export const DEFAULT_DESCRIPTION = 'Initializing...';
-export const DEFAULT_BASE_BRANCH = 'unknown';
-export const TICKET_BRANCH_PREFIX = 'ticket/';
-
-// ─── Orchestrator Parsing ───────────────────────────────────────────────────
-
-export const ORCHESTRATOR_START_PREFIX_PATTERN = /^Starting agent loop for \S+\s*/;
-export const GIT_BRANCH_PATTERN = /branch\s+(\S+)\s+from\s+(\S+)/;

@@ -79,13 +79,7 @@ export interface PhaseInfo {
 
 export interface AgentInfo {
   name: string;
-  status: 'running' | 'done' | 'failed' | 'pending';
   tokenUsage: TokenUsage;
-  lastAction: string;
-  lastMessage: string;
-  lastTimestamp: string;
-  durationMs: number;
-  taskId?: string;
 }
 
 export interface Project {

@@ -4,7 +4,6 @@ import type {
   RawRunState,
   RunState,
   LogEntry,
-  TokenUsage,
   PhaseInfo,
   PhaseStatus,
   PipelineStepState,
@@ -16,18 +15,10 @@ import type {
   ContextFile,
 } from '../types.js';
 import {
-  AGENT_STATUS_ORDER,
-  AgentStatusValue,
-  DEFAULT_BASE_BRANCH,
   DEFAULT_BUDGET,
   DEFAULT_MAX_BUDGET_PER_TASK,
-  DEFAULT_DESCRIPTION,
   FILE_ENCODING,
-  GIT_BRANCH_PATTERN,
   LogAction,
-  ORCHESTRATOR_AGENT,
-  ORCHESTRATOR_LOG_FILE,
-  ORCHESTRATOR_START_PREFIX_PATTERN,
   PER_FILE_TAIL_COUNT,
   PhaseStatusValue,
   RECENT_LOG_COUNT,
@@ -35,7 +26,6 @@ import {
   RunStatusValue,
   StepStatusValue,
   TaskStatusValue,
-  TICKET_BRANCH_PREFIX,
   ZERO_TOKENS,
 } from '../constants.js';
 
@@ -66,19 +56,6 @@ function readJsonl(filePath: string): LogEntry[] {
   } catch {
     return [];
   }
-}
-
-// ─── Token Aggregation ──────────────────────────────────────────────────────
-
-function sumTokens(entries: LogEntry[]): TokenUsage {
-  return entries.reduce((acc, e) => {
-    if (!e.tokenUsage) return acc;
-    return {
-      inputTokens: acc.inputTokens + e.tokenUsage.inputTokens,
-      outputTokens: acc.outputTokens + e.tokenUsage.outputTokens,
-      costUsd: acc.costUsd + e.tokenUsage.costUsd,
-    };
-  }, { ...ZERO_TOKENS });
 }
 
 // ─── Step / Phase Helpers ───────────────────────────────────────────────────
@@ -161,54 +138,6 @@ function getRunStatus(state: RunState, phases: PhaseInfo[]): RunSummary['status'
   return hasAny ? RunStatusValue.Running : RunStatusValue.Pending;
 }
 
-function inferRunSummaryFromLogs(ticketId: string, logsDir: string): RunSummary | null {
-  const logFiles = listLogFiles(logsDir);
-  if (logFiles.length === 0 && !fs.existsSync(logsDir)) return null;
-
-  let earliest = '';
-  let latest = '';
-  let totalCost = 0;
-  let hasError = false;
-  let description = '';
-
-  for (const filePath of logFiles) {
-    const entries = readJsonl(filePath);
-    for (const e of entries) {
-      if (!earliest || e.timestamp < earliest) earliest = e.timestamp;
-      if (!latest || e.timestamp > latest) latest = e.timestamp;
-      if (e.tokenUsage) totalCost += e.tokenUsage.costUsd;
-      if (e.action === LogAction.Error) hasError = true;
-      if (e.action === LogAction.Start && e.agentName === ORCHESTRATOR_AGENT) {
-        description = e.message.replace(ORCHESTRATOR_START_PREFIX_PATTERN, '').trim();
-      }
-      if (e.action === LogAction.Config && e.agentName === ORCHESTRATOR_AGENT && !description) {
-        try {
-          const config = JSON.parse(e.message);
-          if (config.targetCwd) description = `Initializing in ${path.basename(config.targetCwd)}`;
-        } catch { /* ignore */ }
-      }
-    }
-  }
-
-  const status: RunSummary['status'] = hasError
-    ? RunStatusValue.Failed
-    : logFiles.length === 0
-      ? RunStatusValue.Pending
-      : RunStatusValue.Running;
-
-  return {
-    ticketId,
-    description: description || DEFAULT_DESCRIPTION,
-    startedAt: earliest || new Date().toISOString(),
-    completedAt: undefined,
-    totalCostUsd: totalCost,
-    taskCount: 0,
-    completedCount: 0,
-    failedCount: 0,
-    status,
-  };
-}
-
 export function listRuns(runsPath: string): RunSummary[] {
   if (!fs.existsSync(runsPath)) return [];
 
@@ -219,26 +148,21 @@ export function listRuns(runsPath: string): RunSummary[] {
     if (!entry.isDirectory()) continue;
     const runDir = path.join(runsPath, entry.name);
     const raw = readJson<RawRunState>(path.join(runDir, RUN_FILES.tasks));
+    if (!raw) continue;
 
-    if (raw) {
-      const state = normalizeRunState(raw);
-      const phases = buildPhases(state);
-      runs.push({
-        ticketId: state.ticketId,
-        description: state.description,
-        startedAt: state.startedAt,
-        completedAt: state.completedAt,
-        totalCostUsd: state.totalCostUsd,
-        taskCount: state.tasks.length,
-        completedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Completed).length,
-        failedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Failed).length,
-        status: getRunStatus(state, phases),
-      });
-    } else {
-      const logsDir = path.join(runDir, RUN_FILES.logsDir);
-      const summary = inferRunSummaryFromLogs(entry.name, logsDir);
-      if (summary) runs.push(summary);
-    }
+    const state = normalizeRunState(raw);
+    const phases = buildPhases(state);
+    runs.push({
+      ticketId: state.ticketId,
+      description: state.description,
+      startedAt: state.startedAt,
+      completedAt: state.completedAt,
+      totalCostUsd: state.totalCostUsd,
+      taskCount: state.tasks.length,
+      completedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Completed).length,
+      failedCount: state.tasks.filter((t) => t.status === TaskStatusValue.Failed).length,
+      status: getRunStatus(state, phases),
+    });
   }
 
   runs.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
@@ -259,18 +183,13 @@ function listLogFiles(logsDir: string): string[] {
   }
 }
 
-function hasAction(entries: LogEntry[], ...actions: string[]): boolean {
-  return entries.some((e) => actions.includes(e.action));
-}
-
 /**
  * Build the dashboard phase list. Every phase — including `git-setup` — comes
  * from `tasks.json` `steps[]` so completion is decided by a single rule:
  * `step.status` mapped through `phaseStatusFromStep`. Logs are not consulted.
  */
-function buildPhases(state: RunState | null, modelMap?: Map<string, string>): PhaseInfo[] {
-  const steps = state?.steps ?? [];
-  return steps.map((step, idx) => ({
+function buildPhases(state: RunState, modelMap?: Map<string, string>): PhaseInfo[] {
+  return state.steps.map((step, idx) => ({
     id: idx + 1,
     label: humanizeStepId(step.id),
     status: phaseStatusFromStep(step.status),
@@ -304,46 +223,11 @@ function readPipelineConfig(runsPath: string): Map<string, string> {
   return modelMap;
 }
 
-function buildAgents(logsDir: string): AgentInfo[] {
-  const agents: AgentInfo[] = [];
-
-  for (const filePath of listLogFiles(logsDir)) {
-    const name = path.basename(filePath, RUN_FILES.jsonlExt);
-    if (name === ORCHESTRATOR_AGENT) continue;
-
-    const entries = readJsonl(filePath);
-    if (entries.length === 0) continue;
-
-    const last = entries[entries.length - 1]!;
-    const first = entries[0]!;
-    const tokenUsage = sumTokens(entries);
-    const isSessionDone = hasAction(entries, LogAction.SessionEnd, LogAction.Complete);
-    const isError = last.action === LogAction.Error && !isSessionDone;
-
-    const status: AgentInfo['status'] = isError
-      ? AgentStatusValue.Failed
-      : isSessionDone
-        ? AgentStatusValue.Done
-        : AgentStatusValue.Running;
-
-    const startTs = new Date(first.timestamp).getTime();
-    const endTs = new Date(last.timestamp).getTime();
-    const durationMs = !isNaN(startTs) && !isNaN(endTs) && endTs > startTs ? endTs - startTs : 0;
-
-    agents.push({
-      name,
-      status,
-      tokenUsage,
-      lastAction: last.action,
-      lastMessage: last.message ?? '',
-      lastTimestamp: last.timestamp ?? '',
-      durationMs,
-      taskId: last.taskId,
-    });
-  }
-
-  agents.sort((a, b) => AGENT_STATUS_ORDER[a.status]! - AGENT_STATUS_ORDER[b.status]!);
-  return agents;
+function buildAgents(steps: PipelineStepState[]): AgentInfo[] {
+  return steps.map((step) => ({
+    name: step.id,
+    tokenUsage: step.tokenUsage ?? { ...ZERO_TOKENS },
+  }));
 }
 
 function buildRecentLogs(logsDir: string, count: number): LogEntry[] {
@@ -355,67 +239,14 @@ function buildRecentLogs(logsDir: string, count: number): LogEntry[] {
   return all.slice(-count);
 }
 
-function synthesizeRawState(ticketId: string, logsDir: string): RawRunState {
-  const orchEntries = readJsonl(path.join(logsDir, ORCHESTRATOR_LOG_FILE));
-  let branch = '';
-  let baseBranch = '';
-  let description = '';
-
-  for (const e of orchEntries) {
-    if (e.action === LogAction.Git && e.message.includes('branch')) {
-      const match = e.message.match(GIT_BRANCH_PATTERN);
-      if (match) {
-        branch = match[1]!;
-        baseBranch = match[2]!;
-      }
-    }
-    if (e.action === LogAction.Start) {
-      description = e.message.replace(ORCHESTRATOR_START_PREFIX_PATTERN, '').trim();
-    }
-  }
-
-  let startedAt = '';
-  for (const filePath of listLogFiles(logsDir)) {
-    const entries = readJsonl(filePath);
-    if (entries.length > 0 && (!startedAt || entries[0]!.timestamp < startedAt)) {
-      startedAt = entries[0]!.timestamp;
-    }
-  }
-
-  return {
-    ticketId,
-    description: description || DEFAULT_DESCRIPTION,
-    baseBranch: baseBranch || DEFAULT_BASE_BRANCH,
-    branch: branch || `${TICKET_BRANCH_PREFIX}${ticketId}`,
-    pipelineStartedAt: startedAt || new Date().toISOString(),
-    totalCostUsd: 0,
-    steps: [],
-  };
-}
-
 export function getRunDetail(runsPath: string, ticketId: string): RunDetail | null {
   const runDir = path.join(runsPath, ticketId);
   if (!fs.existsSync(runDir)) return null;
 
-  const logsDir = path.join(runDir, RUN_FILES.logsDir);
-  const raw =
-    readJson<RawRunState>(path.join(runDir, RUN_FILES.tasks)) ??
-    synthesizeRawState(ticketId, logsDir);
+  const raw = readJson<RawRunState>(path.join(runDir, RUN_FILES.tasks));
+  if (!raw) return null;
 
   let state = normalizeRunState(raw);
-
-  // Recompute total cost from all log files so the headline number includes
-  // post-implementation phases (state.totalCostUsd persisted by the agent
-  // loop only covers worker tasks).
-  let totalFromLogs = 0;
-  let latestLogTs = '';
-  for (const filePath of listLogFiles(logsDir)) {
-    for (const e of readJsonl(filePath)) {
-      if (e.tokenUsage) totalFromLogs += e.tokenUsage.costUsd;
-      if (e.timestamp && e.timestamp > latestLogTs) latestLogTs = e.timestamp;
-    }
-  }
-  state = { ...state, totalCostUsd: totalFromLogs };
 
   const modelMap = readPipelineConfig(runsPath);
   const phases = buildPhases(state, modelMap);
@@ -434,27 +265,11 @@ export function getRunDetail(runsPath: string, ticketId: string): RunDetail | nu
     state = { ...state, status: StepStatusValue.InProgress };
   }
 
-  // Synthesize completedAt from the latest log timestamp when the orchestrator
-  // reports a terminal top-level status, or (legacy fallback) every phase is
-  // terminal — so the UI stops ticking even if pipelineCompletedAt is missing.
-  const statusTerminal =
-    state.status === StepStatusValue.Completed || state.status === StepStatusValue.Failed;
-  const allTerminal =
-    phases.length > 0 &&
-    phases.every(
-      (p) =>
-        p.status === PhaseStatusValue.Done ||
-        p.status === PhaseStatusValue.Failed ||
-        p.status === PhaseStatusValue.Skipped,
-    );
-  if ((statusTerminal || allTerminal) && !state.completedAt && latestLogTs) {
-    state = { ...state, completedAt: latestLogTs };
-  }
-
+  const logsDir = path.join(runDir, RUN_FILES.logsDir);
   return {
     state,
     phases,
-    agents: buildAgents(logsDir),
+    agents: buildAgents(state.steps),
     recentLogs: buildRecentLogs(logsDir, RECENT_LOG_COUNT),
     totalBudget: raw.totalBudgetUsd ?? DEFAULT_BUDGET,
     maxBudgetPerTask: raw.maxBudgetPerTaskUsd ?? DEFAULT_MAX_BUDGET_PER_TASK,
